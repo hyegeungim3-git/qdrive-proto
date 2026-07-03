@@ -1,0 +1,83 @@
+@import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #0b0f17;
+  color: #e5e7eb;
+  font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Leaflet 다크 테마 보정 */
+.leaflet-container {
+  background: #0b0f17;
+  font: inherit;
+}
+.leaflet-control-attribution {
+  background: rgba(11, 15, 23, 0.7) !important;
+  color: #6b7280 !important;
+}
+.leaflet-control-attribution a {
+  color: #9ca3af !important;
+}
+
+/* 버스 마커 */
+.bus-marker {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  transform: translate(-8px, -8px);
+}
+.bus-marker .dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid #0b0f17;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+}
+.bus-marker .label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #e5e7eb;
+  background: rgba(11, 15, 23, 0.85);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid #1f2937;
+}
+.bus-marker.warn .dot {
+  animation: pulse-red 0.9s ease-in-out infinite;
+}
+@keyframes pulse-red {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+}
+
+/* 스크롤바 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
