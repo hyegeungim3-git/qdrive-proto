@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 export type Theme = 'dark' | 'light'
 
-let theme: Theme = (localStorage.getItem('qdrive-theme') as Theme) || 'dark'
+let theme: Theme = (localStorage.getItem('qdrive-theme') as Theme) || 'light'
 const listeners = new Set<() => void>()
 
 function apply() {
