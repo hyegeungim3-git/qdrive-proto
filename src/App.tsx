@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import DemoControls from './components/DemoControls'
+import { toggleTheme, useTheme } from './theme'
 import { useSim } from './sim/store'
 import CityDashboard from './views/CityDashboard'
 import OperatorView from './views/OperatorView'
@@ -22,6 +23,7 @@ type TabId = (typeof TABS)[number]['id']
 export default function App() {
   const [tab, setTab] = useState<TabId>('city')
   const snap = useSim()
+  const theme = useTheme()
 
   return (
     <div className="flex h-svh flex-col">
@@ -29,7 +31,7 @@ export default function App() {
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 bg-gray-950 px-5 py-2.5">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
           <div className="whitespace-nowrap">
-            <div className="text-lg font-black tracking-tight text-white">
+            <div className="text-lg font-black tracking-tight text-gray-50">
               Q<span className="text-sky-400">drive</span>
               <span className="ml-2 hidden text-[10px] font-semibold tracking-widest text-gray-500 xl:inline">
                 EMSP · 차량용 탄소중립 서비스 플랫폼
@@ -54,7 +56,16 @@ export default function App() {
             ))}
           </nav>
         </div>
-        <DemoControls snap={snap} />
+        <div className="flex items-center gap-2">
+          <DemoControls snap={snap} />
+          <button
+            onClick={toggleTheme}
+            className="rounded-md border border-gray-800 bg-gray-900 px-2.5 py-1 text-xs font-semibold text-gray-300 hover:text-gray-100"
+            title="라이트/다크 모드 전환"
+          >
+            {theme === 'dark' ? '☀️ 밝게' : '🌙 다크'}
+          </button>
+        </div>
       </header>
 
       {/* 본문 */}

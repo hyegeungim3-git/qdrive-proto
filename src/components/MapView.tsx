@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip } from 'react-leaflet'
 import L from 'leaflet'
+import { useTheme } from '../theme'
 import { DAEGU_CENTER, ROUTES } from '../sim/routes'
 import { indexPolyline, pointAt } from '../sim/geo'
 import type { Packet409, VehicleState } from '../sim/types'
@@ -42,6 +43,7 @@ export default function MapView({
   highlightRouteId?: string | null
 }) {
   const cells = useMemo(() => (showHeat ? heatCells(events) : []), [events, showHeat])
+  const theme = useTheme()
 
   return (
     <MapContainer
@@ -51,7 +53,8 @@ export default function MapView({
       zoomControl={false}
     >
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        key={theme}
+        url={`https://{s}.basemaps.cartocdn.com/${theme === 'dark' ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`}
         attribution='&copy; OpenStreetMap &copy; CARTO'
       />
 

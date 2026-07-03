@@ -63,7 +63,7 @@ export default function DriverApp() {
           {/* 상단 상태바 */}
           <div className="flex items-center justify-between border-b border-gray-800 bg-gray-900/80 px-5 py-2.5">
             <div className="flex items-center gap-4">
-              <span className="text-lg font-black text-white">
+              <span className="text-lg font-black text-gray-50">
                 Q<span className="text-sky-400">drive</span>
               </span>
               <span className="flex items-center gap-2 text-sm text-gray-300">
@@ -107,7 +107,7 @@ export default function DriverApp() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-1 items-center justify-center gap-10 rounded-2xl bg-gray-900/60">
                 <div className="text-center">
-                  <div className="text-[88px] font-black leading-none tabular-nums text-white">
+                  <div className="text-[88px] font-black leading-none tabular-nums text-gray-50">
                     {Math.round(v.speedKmh)}
                   </div>
                   <div className="mt-1 text-sm text-gray-500">km/h · 차량속도(내부)</div>
@@ -204,11 +204,17 @@ export default function DriverApp() {
 
           {/* 전체 화면 경고 오버레이 */}
           {warnActive && v.lastEvent && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-red-950/85 backdrop-blur-[2px]">
+            /* 경고 오버레이는 테마와 무관하게 고정 색상 (야간·주간 모두 동일 시인성) */
+            <div
+              className="absolute inset-0 z-20 flex items-center justify-center backdrop-blur-[2px]"
+              style={{ background: 'rgba(69, 10, 10, 0.88)' }}
+            >
               <div className="animate-pulse text-center">
                 <div className="text-7xl">⚠️</div>
-                <div className="mt-2 text-6xl font-black text-red-300">{v.lastEvent.eventType}</div>
-                <div className="mt-3 text-xl text-red-200/80">
+                <div className="mt-2 text-6xl font-black" style={{ color: '#fca5a5' }}>
+                  {v.lastEvent.eventType}
+                </div>
+                <div className="mt-3 text-xl" style={{ color: 'rgba(254, 202, 202, 0.85)' }}>
                   {v.lastEvent.speedKmh} km/h · 안전운전 부탁드립니다
                 </div>
               </div>

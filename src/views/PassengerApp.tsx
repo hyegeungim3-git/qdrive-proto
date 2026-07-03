@@ -90,7 +90,7 @@ export default function PassengerApp() {
           {/* 헤더 */}
           <div className="bg-gray-900 px-4 py-3">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-black text-white">
+              <div className="text-sm font-black text-gray-50">
                 Q<span className="text-sky-400">drive</span>
                 <span className="ml-1.5 text-[10px] font-semibold text-gray-500">시민</span>
               </div>
