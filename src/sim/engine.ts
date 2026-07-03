@@ -177,9 +177,9 @@ export class SimEngine {
     this.emit()
   }
 
-  /** 데모 트리거: 냉각수온 고장 예측 시나리오 시작 */
+  /** 데모 트리거: 냉각수온 고장 예측 시나리오 시작 (재시연 가능 — 기존 시나리오 초기화 후 재시작) */
   triggerFault() {
-    if (this.fault) return
+    this.workOrders = this.workOrders.filter((w) => w.vehicleId !== DEMO_VEHICLE_ID)
     this.fault = {
       vehicleId: DEMO_VEHICLE_ID,
       kind: '냉각수온 이상',
@@ -233,10 +233,12 @@ export class SimEngine {
 
   /* ── Agentic: 배차간격(버스 몰림) 권고 ─────────────────────── */
 
-  /** 데모 트리거: 현재 지오메트리 기준 배차 권고 강제 생성 */
-  forceRecommendation() {
+  /** 데모 트리거: 현재 지오메트리 기준 배차 권고 강제 생성. 이미 대기 중이면 'pending' 반환 */
+  forceRecommendation(): 'created' | 'pending' {
+    if (this.recommendations.some((r) => r.status !== '실행완료')) return 'pending'
     this.createBunchingRecommendation(true)
     this.emit()
+    return 'created'
   }
 
   approveRecommendation(id: number) {

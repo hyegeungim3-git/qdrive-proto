@@ -57,7 +57,7 @@ export default function App() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          <DemoControls snap={snap} />
+          <DemoControls snap={snap} onNavigate={(t) => setTab(t as TabId)} />
           <button
             onClick={toggleTheme}
             className="rounded-md border border-gray-800 bg-gray-900 px-2.5 py-1 text-xs font-semibold text-gray-300 hover:text-gray-100"
