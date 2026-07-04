@@ -4,6 +4,7 @@ import L from 'leaflet'
 import { useTheme } from '../theme'
 import { DAEGU_CENTER, ROUTES } from '../sim/routes'
 import { indexPolyline, pointAt } from '../sim/geo'
+import type { RealBus } from '../sim/bis'
 import type { Packet409, VehicleState } from '../sim/types'
 
 const ROUTE_IDX = new Map(ROUTES.map((r) => [r.id, indexPolyline(r.points)]))
@@ -31,16 +32,29 @@ function heatCells(events: Packet409[]) {
   return [...cells.values()]
 }
 
+function realBusIcon(b: RealBus): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div class="bus-marker real">
+      <span class="dot"></span>
+      <span class="label">실 ${b.routeNo}</span>
+    </div>`,
+    iconSize: [0, 0],
+  })
+}
+
 export default function MapView({
   vehicles,
   events,
   showHeat,
   highlightRouteId,
+  realBuses = [],
 }: {
   vehicles: VehicleState[]
   events: Packet409[]
   showHeat: boolean
   highlightRouteId?: string | null
+  realBuses?: RealBus[]
 }) {
   const cells = useMemo(() => (showHeat ? heatCells(events) : []), [events, showHeat])
   const theme = useTheme()
@@ -103,6 +117,19 @@ export default function MapView({
         >
           <Tooltip direction="top">위험운전 {c.count}건</Tooltip>
         </CircleMarker>
+      ))}
+
+      {/* BIS 실데이터 버스 (TAGO 오픈API) */}
+      {realBuses.map((b) => (
+        <Marker key={`real-${b.vehicleNo}`} position={[b.lat, b.lng]} icon={realBusIcon(b)}>
+          <Tooltip direction="top" offset={[0, -10]}>
+            <div style={{ fontSize: 11 }}>
+              <b>{b.vehicleNo}</b> · {b.routeNo}
+              <br />
+              대구 BIS 실데이터 (TAGO)
+            </div>
+          </Tooltip>
+        </Marker>
       ))}
 
       {/* 버스 */}

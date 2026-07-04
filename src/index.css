@@ -112,6 +112,16 @@ html.light .bus-marker .dot {
 .bus-marker.warn .dot {
   animation: pulse-red 0.9s ease-in-out infinite;
 }
+/* BIS 실데이터 버스 — 속이 빈 마커로 시뮬레이션과 구분 */
+.bus-marker.real .dot {
+  background: transparent;
+  border: 3px solid #38bdf8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+}
+.bus-marker.real .label {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
 @keyframes pulse-red {
   0%,
   100% {

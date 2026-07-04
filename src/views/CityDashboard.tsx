@@ -2,11 +2,15 @@ import { useState } from 'react'
 import MapView from '../components/MapView'
 import { KpiCard, Panel, simClock } from '../components/ui'
 import { engine, useSim } from '../sim/store'
+import { getBisKey, setBisKey, startBis, stopBis, useBis } from '../sim/bis'
 import { ROUTES } from '../sim/routes'
 
 export default function CityDashboard() {
   const snap = useSim()
   const [showHeat, setShowHeat] = useState(true)
+  const bis = useBis()
+  const [keyInput, setKeyInput] = useState(getBisKey())
+  const [showKeyForm, setShowKeyForm] = useState(false)
 
   // 원인식별 단계 이상의 민원이 있으면 해당 노선 하이라이트
   const activeComplaint = snap.complaints.find((c) => c.status !== '해결')
@@ -24,6 +28,7 @@ export default function CityDashboard() {
           events={snap.events}
           showHeat={showHeat}
           highlightRouteId={highlightRouteId}
+          realBuses={bis.buses}
         />
         <button
           onClick={() => setShowHeat((s) => !s)}
@@ -70,6 +75,82 @@ export default function CityDashboard() {
             accent="text-emerald-400"
           />
         </div>
+
+        {/* BIS 실데이터 연동 (TAGO 오픈API) */}
+        <Panel
+          title="📡 대구 BIS 실데이터"
+          right={
+            bis.status === 'ok' ? (
+              <span className="text-[11px] font-bold text-sky-400">
+                ● 실차 {bis.buses.length}대 수신 중
+              </span>
+            ) : (
+              <span className="text-[11px] text-gray-500">TAGO 오픈API · 15초 갱신</span>
+            )
+          }
+        >
+          <div className="space-y-2 text-xs">
+            {bis.status === 'idle' && (
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">
+                  실제 대구 버스({['급행1', '급행3', '순환2'].join('·')}) 위치를 지도에 오버레이
+                </span>
+                <button
+                  onClick={() => (getBisKey() ? startBis() : setShowKeyForm(true))}
+                  className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
+                >
+                  연동 시작
+                </button>
+              </div>
+            )}
+            {bis.status === 'loading' && <div className="text-sky-300">⏳ {bis.message || '연결 중…'}</div>}
+            {bis.status === 'ok' && (
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">
+                  {bis.matchedRoutes.join(' · ')} — 지도에서 <b className="text-sky-400">속이 빈 하늘색 마커</b>가
+                  실차 (시뮬레이션과 나란히 표시)
+                </span>
+                <button
+                  onClick={stopBis}
+                  className="rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
+                >
+                  중지
+                </button>
+              </div>
+            )}
+            {bis.status === 'error' && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-red-400">⚠ {bis.message}</span>
+                <button
+                  onClick={() => setShowKeyForm(true)}
+                  className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
+                >
+                  키 설정
+                </button>
+              </div>
+            )}
+            {(showKeyForm || (bis.status === 'error' && !getBisKey())) && (
+              <div className="flex gap-2">
+                <input
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  placeholder="공공데이터포털 일반 인증키 (data.go.kr 발급)"
+                  className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-[11px] text-gray-200 placeholder:text-gray-600 focus:border-sky-500/60 focus:outline-none"
+                />
+                <button
+                  onClick={() => {
+                    setBisKey(keyInput)
+                    setShowKeyForm(false)
+                    startBis()
+                  }}
+                  className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
+                >
+                  저장·시작
+                </button>
+              </div>
+            )}
+          </div>
+        </Panel>
 
         {/* 날씨/행사 기반 수요·지연·사고위험 예측 */}
         {snap.weather.condition !== '맑음' && (
