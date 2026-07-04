@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { engine, useSim } from '../sim/store'
 import { DEMO_VEHICLE_ID } from '../sim/engine'
 import { ROUTES } from '../sim/routes'
@@ -80,30 +80,26 @@ export default function PassengerApp() {
   const notice = cityNotice(snap)
   const myComplaint = snap.complaints[0]
 
-  /* ── 하차 알림 (졸음·놓침 방지) ── */
-  const [riding, setRiding] = useState<{ vehicleId: string; routeId: string; dest: string } | null>(null)
+  /* ── 하차 예약 (졸음·놓침 방지) — 예약 정보는 엔진에 저장되어 탭 전환에도 유지 ── */
   const [pickRoute, setPickRoute] = useState<string | null>(null)
   const [destSel, setDestSel] = useState('')
-  const wasAtDest = useRef(false)
+  const [autoSel, setAutoSel] = useState(true) // 기본: 하차벨 자동 예약
 
+  const riding = snap.reservation
   const ridingBus = riding ? snap.vehicles.find((x) => x.id === riding.vehicleId) : null
-  const ridingRoute = riding ? ROUTES.find((r) => r.id === riding.routeId)! : null
-  const atDest = !!ridingBus && !!riding && ridingBus.nextStopName === riding.dest
+  const ridingRoute = ridingBus ? ROUTES.find((r) => r.id === ridingBus.routeId)! : null
+  const atDest = !!ridingBus && !!riding && ridingBus.nextStopName === riding.stopName
   const arrivedNow = atDest && ridingBus!.dwellRemaining > 0 && ridingBus!.nextStopDistM < 30
   const alarmNow = atDest && !arrivedNow
   const destRemainM =
     ridingBus && riding && ridingRoute
-      ? remainingToPoint(ridingBus, ridingRoute.loop, ROUTE_IDX.get(riding.routeId)!.totalM, stopM(riding.routeId, riding.dest))
+      ? remainingToPoint(
+          ridingBus,
+          ridingRoute.loop,
+          ROUTE_IDX.get(ridingBus.routeId)!.totalM,
+          stopM(ridingBus.routeId, riding.stopName),
+        )
       : 0
-
-  // 목적지 정차 후 출발하면 자동 종료
-  useEffect(() => {
-    if (arrivedNow) wasAtDest.current = true
-    else if (wasAtDest.current && ridingBus && riding && ridingBus.nextStopName !== riding.dest) {
-      wasAtDest.current = false
-      setRiding(null)
-    }
-  }, [arrivedNow, ridingBus, riding])
 
   const board = () => {
     if (!pickRoute || !destSel) return
@@ -118,7 +114,7 @@ export default function PassengerApp() {
             .filter((v) => v.routeId === pickRoute)
             .sort((a, b) => etaMinutes(a, route.loop, idx.totalM) - etaMinutes(b, route.loop, idx.totalM))[0]
     if (!bus) return
-    setRiding({ vehicleId: bus.id, routeId: pickRoute, dest: destSel })
+    engine.setReservation(bus.id, destSel, autoSel)
     setPickRoute(null)
     setDestSel('')
   }
@@ -241,7 +237,7 @@ export default function PassengerApp() {
                     disabled={!destSel}
                     className="rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500 disabled:opacity-40"
                   >
-                    시작
+                    {autoSel ? '예약' : '시작'}
                   </button>
                   <button
                     onClick={() => setPickRoute(null)}
@@ -250,6 +246,16 @@ export default function PassengerApp() {
                     ✕
                   </button>
                 </div>
+                <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-gray-400">
+                  <input
+                    type="checkbox"
+                    checked={autoSel}
+                    onChange={(e) => setAutoSel(e.target.checked)}
+                    className="h-3 w-3 accent-sky-500"
+                  />
+                  <b className="text-gray-300">하차벨 자동 예약</b> — 깜빡 졸아도 도착 전에 기사님께 자동
+                  전달돼요
+                </label>
               </div>
             )}
 
@@ -266,40 +272,71 @@ export default function PassengerApp() {
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-[11px] font-bold text-gray-200">
                     <span className="h-2 w-2 rounded-full" style={{ background: ridingRoute.color }} />
-                    {ridingRoute.name} {ridingBus.id.slice(-4)}호 탑승 중 → <b className="text-sky-300">{riding.dest}</b>
+                    {ridingRoute.name} {ridingBus.id.slice(-4)}호 탑승 중 →{' '}
+                    <b className="text-sky-300">{riding.stopName}</b>
+                    {riding.auto && (
+                      <span className="rounded bg-sky-500/20 px-1 py-0.5 text-[9px] font-bold text-sky-300">
+                        자동예약
+                      </span>
+                    )}
                   </span>
-                  <button onClick={() => setRiding(null)} className="text-[10px] text-gray-600 hover:text-gray-400">
+                  <button
+                    onClick={() => engine.cancelReservation()}
+                    className="text-[10px] text-gray-600 hover:text-gray-400"
+                  >
                     해제 ✕
                   </button>
                 </div>
 
                 {arrivedNow ? (
                   <div className="mt-2 text-center">
-                    <div className="text-lg font-black text-emerald-400">🚏 {riding.dest} 도착!</div>
+                    <div className="text-lg font-black text-emerald-400">🚏 {riding.stopName} 도착!</div>
                     <div className="text-[11px] text-emerald-300/80">안녕히 가세요 👋 소지품을 확인하세요</div>
                   </div>
                 ) : alarmNow ? (
                   <div className="mt-2 text-center">
                     <div className="text-lg font-black text-red-300">⏰ 다음 정류장에서 내리세요!</div>
                     <div className="mb-2 text-[11px] tabular-nums text-red-200/80">
-                      {riding.dest}까지 약 {Math.max(0, Math.round(ridingBus.nextStopDistM))}m
+                      {riding.stopName}까지 약 {Math.max(0, Math.round(ridingBus.nextStopDistM))}m
                     </div>
-                    <button
-                      onClick={() => engine.pressBell(ridingBus.id)}
-                      disabled={ridingBus.bellPressed}
-                      className={`w-full rounded-xl py-2.5 text-sm font-black ${
-                        ridingBus.bellPressed
-                          ? 'bg-emerald-600/30 text-emerald-300'
-                          : 'bg-red-600 text-white hover:bg-red-500'
-                      }`}
-                    >
-                      {ridingBus.bellPressed ? '✓ 하차벨 눌림 — 기사님께 전달됨' : '🔴 하차벨 누르기'}
-                    </button>
+                    {riding.auto ? (
+                      <div
+                        className={`w-full rounded-xl py-2.5 text-sm font-black ${
+                          ridingBus.bellPressed
+                            ? 'bg-emerald-600/30 text-emerald-300'
+                            : 'bg-sky-600/30 text-sky-200'
+                        }`}
+                      >
+                        {ridingBus.bellPressed
+                          ? '✓ 하차벨 자동 전달 완료 — 편히 내리세요'
+                          : '🔔 예약됨 — 곧 하차벨이 자동 전달돼요'}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => engine.pressBell(ridingBus.id)}
+                        disabled={ridingBus.bellPressed}
+                        className={`w-full rounded-xl py-2.5 text-sm font-black ${
+                          ridingBus.bellPressed
+                            ? 'bg-emerald-600/30 text-emerald-300'
+                            : 'bg-red-600 text-white hover:bg-red-500'
+                        }`}
+                      >
+                        {ridingBus.bellPressed ? '✓ 하차벨 눌림 — 기사님께 전달됨' : '🔴 하차벨 누르기'}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="mt-2 flex items-center justify-between text-[11px]">
                     <span className="text-gray-400">
-                      😴 편히 가세요 — 도착 전에 <b className="text-gray-200">진동·소리로 깨워드려요</b>
+                      {riding.auto ? (
+                        <>
+                          😴 편히 주무세요 — 하차벨까지 <b className="text-gray-200">자동으로 처리돼요</b>
+                        </>
+                      ) : (
+                        <>
+                          😴 편히 가세요 — 도착 전에 <b className="text-gray-200">진동·소리로 깨워드려요</b>
+                        </>
+                      )}
                     </span>
                     <span className="shrink-0 tabular-nums text-gray-500">
                       남은 거리 {(destRemainM / 1000).toFixed(1)}km
@@ -379,9 +416,9 @@ export default function PassengerApp() {
             문장으로 자동 변환. "왜 늦는지"를 알려주는 투명한 안내
           </li>
           <li>
-            <b className="text-gray-200">하차 알림</b> — 목적지 정류장을 정해두면 도착 직전 진동·소리로
-            깨워주고, <b className="text-gray-200">앱에서 누른 하차벨이 기사 태블릿에 즉시 표시</b>
-            (졸음·하차 놓침 방지 + 교통약자 배려)
+            <b className="text-gray-200">하차 예약</b> — 목적지를 정해두면 도착 직전 진동·소리로 깨워주고,{' '}
+            <b className="text-gray-200">하차벨은 자동으로 기사님께 전달</b>(예약 모드). 기사 태블릿에는
+            하차 예약이 미리 표시되어 무정차 통과도 예방 (졸음·하차 놓침 방지 + 교통약자 배려)
           </li>
           <li>
             <b className="text-gray-200">민원 접수 → 처리 추적</b> — 여기서 접수한 민원이 시티

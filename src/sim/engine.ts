@@ -2,6 +2,7 @@ import { indexPolyline, pointAt, type PolylineIndex } from './geo'
 import { ROUTES, type BusRoute } from './routes'
 import {
   RISK_EVENT_TYPES,
+  type AlightReservation,
   type Complaint,
   type DispatchRecommendation,
   type DriverPersona,
@@ -105,6 +106,7 @@ export class SimEngine {
   private woSeq = 1
   private bunchingTimer = 0
   private weather: WeatherState = { condition: '맑음', tempC: 24, rainMm: 0, delayForecastMin: 0, demandDeltaPct: 0 }
+  private reservation: AlightReservation | null = null
 
   simTime = 0
   running = true
@@ -296,6 +298,17 @@ export class SimEngine {
     this.emit()
   }
 
+  /** 하차 예약 — 목적지 접근 시 하차벨 자동 전달 (auto=false면 알람만) */
+  setReservation(vehicleId: string, stopName: string, auto: boolean) {
+    this.reservation = { vehicleId, stopName, auto }
+    this.emit()
+  }
+
+  cancelReservation() {
+    this.reservation = null
+    this.emit()
+  }
+
   /* ── 시뮬레이션 스텝 ─────────────────────────────────────── */
 
   private step(dt: number) {
@@ -323,6 +336,10 @@ export class SimEngine {
       v.baselineFuelM3 += IDLE_FUEL_PER_S * dt * (1 + BASELINE_PENALTY[v.persona] * 0.3)
       if (v.dwellRemaining <= 0) {
         v.bellPressed = false // 정류장 출발 시 하차벨 해제
+        // 예약된 하차 정류장에서 출발 → 예약 완료 처리
+        if (this.reservation && this.reservation.vehicleId === v.id && v.nextStopName === this.reservation.stopName) {
+          this.reservation = null
+        }
         v.nextStopM = this.findNextStop(v, ctx.stopDists, ctx.idx.totalM)
       }
       return
@@ -392,6 +409,12 @@ export class SimEngine {
     // 다음 정류장 메타 (인포테인먼트 표출)
     v.nextStopDistM = Math.abs(v.nextStopM - v.odoOnRoute)
     v.nextStopName = this.stopNameAt(v.routeId, v.nextStopM)
+
+    // 하차 예약: 목적지 접근 시 하차벨 자동 전달
+    const res = this.reservation
+    if (res && res.auto && res.vehicleId === v.id && !v.bellPressed && v.nextStopName === res.stopName && v.nextStopDistM < 350) {
+      v.bellPressed = true
+    }
 
     // 위험운전 이벤트 확률 발생 (폭우 시 위험 ↑)
     const weatherRisk = this.weather.condition === '폭우' ? 1.5 : 1
@@ -561,6 +584,7 @@ export class SimEngine {
       complaints: this.complaints.map((c) => ({ ...c })),
       recommendations: this.recommendations.map((r) => ({ ...r })),
       workOrders: this.workOrders.map((w) => ({ ...w })),
+      reservation: this.reservation ? { ...this.reservation } : null,
       kpi: {
         totalDistanceKm: totalDist,
         totalFuelM3: totalFuel,

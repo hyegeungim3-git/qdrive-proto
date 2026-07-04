@@ -152,7 +152,14 @@ export default function DriverApp() {
               {/* 다음 정류장 */}
               <div className="flex items-center justify-between gap-4 rounded-2xl bg-gray-900/60 px-6 py-4">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] text-gray-500">다음 정류장</div>
+                  <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                    다음 정류장
+                    {snap.reservation?.vehicleId === v.id && (
+                      <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold text-sky-300">
+                        🔔 {snap.reservation.stopName} 하차 예약 1명
+                      </span>
+                    )}
+                  </div>
                   <div className="truncate text-2xl font-extrabold text-gray-100">
                     🚏 {v.nextStopName || '—'}
                   </div>

@@ -125,6 +125,14 @@ export interface Complaint {
   evidence?: ComplaintEvidence
 }
 
+/** 하차 예약 — 승객이 목적지를 지정하면 도착 전 하차벨 자동 전달 */
+export interface AlightReservation {
+  vehicleId: string
+  stopName: string
+  /** true = 하차벨 자동 전달 (예약), false = 알람만 (직접 누름) */
+  auto: boolean
+}
+
 /** 배차간격(버스 몰림) 권고 — 승인 기반 실행 */
 export interface DispatchRecommendation {
   id: number
@@ -172,6 +180,7 @@ export interface SimSnapshot {
   complaints: Complaint[]
   recommendations: DispatchRecommendation[]
   workOrders: WorkOrder[]
+  reservation: AlightReservation | null
   kpi: {
     totalDistanceKm: number
     totalFuelM3: number
