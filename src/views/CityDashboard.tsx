@@ -90,19 +90,25 @@ export default function CityDashboard() {
           }
         >
           <div className="space-y-2 text-xs">
-            {bis.status === 'idle' && (
-              <div className="flex items-center justify-between">
+            {bis.status === 'idle' &&
+              (import.meta.env.DEV ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">
+                    실제 대구 버스({['급행1', '급행3', '순환2'].join('·')}) 위치를 지도에 오버레이
+                  </span>
+                  <button
+                    onClick={() => (getBisKey() ? startBis() : setShowKeyForm(true))}
+                    className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
+                  >
+                    연동 시작
+                  </button>
+                </div>
+              ) : (
                 <span className="text-gray-500">
-                  실제 대구 버스({['급행1', '급행3', '순환2'].join('·')}) 위치를 지도에 오버레이
+                  실제 대구 버스 위치 오버레이(TAGO 오픈API)는 <b className="text-gray-400">로컬 실행</b>
+                  에서 지원 — 공공데이터포털 프록시 필요 (README 참고)
                 </span>
-                <button
-                  onClick={() => (getBisKey() ? startBis() : setShowKeyForm(true))}
-                  className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
-                >
-                  연동 시작
-                </button>
-              </div>
-            )}
+              ))}
             {bis.status === 'loading' && <div className="text-sky-300">⏳ {bis.message || '연결 중…'}</div>}
             {bis.status === 'ok' && (
               <div className="flex items-center justify-between">
