@@ -47,7 +47,9 @@ export default function App() {
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-left transition-colors ${
-                  tab === t.id ? 'bg-sky-600/20 text-sky-300' : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
+                  tab === t.id
+                    ? 'bg-sky-600/20 text-sky-300 ring-1 ring-sky-500/40'
+                    : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
                 }`}
               >
                 <div className="text-xs font-bold">{t.label}</div>
@@ -60,7 +62,7 @@ export default function App() {
           <DemoControls snap={snap} onNavigate={(t) => setTab(t as TabId)} />
           <button
             onClick={toggleTheme}
-            className="rounded-md border border-gray-800 bg-gray-900 px-2.5 py-1 text-xs font-semibold text-gray-300 hover:text-gray-100"
+            className="whitespace-nowrap rounded-md border border-gray-800 bg-gray-900 px-2.5 py-1 text-xs font-semibold text-gray-300 hover:text-gray-100"
             title="라이트/다크 모드 전환"
           >
             {theme === 'dark' ? '☀️ 밝게' : '🌙 다크'}

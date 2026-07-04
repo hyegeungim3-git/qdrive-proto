@@ -107,10 +107,10 @@ export default function DriverApp() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-1 items-center justify-center gap-10 rounded-2xl bg-gray-900/60">
                 <div className="text-center">
-                  <div className="text-[88px] font-black leading-none tabular-nums text-gray-50">
+                  <div className="text-[88px] font-black leading-none tracking-tighter tabular-nums text-gray-50">
                     {Math.round(v.speedKmh)}
                   </div>
-                  <div className="mt-1 text-sm text-gray-500">km/h · 차량속도(내부)</div>
+                  <div className="mt-1 whitespace-nowrap text-sm text-gray-500">km/h · 차량속도 (내부)</div>
                 </div>
                 <div className="space-y-3 text-center">
                   <div>
@@ -130,18 +130,18 @@ export default function DriverApp() {
               </div>
 
               {/* 다음 정류장 */}
-              <div className="flex items-center justify-between rounded-2xl bg-gray-900/60 px-6 py-4">
-                <div>
+              <div className="flex items-center justify-between gap-4 rounded-2xl bg-gray-900/60 px-6 py-4">
+                <div className="min-w-0 flex-1">
                   <div className="text-[11px] text-gray-500">다음 정류장</div>
-                  <div className="text-2xl font-bold text-gray-100">
+                  <div className="truncate text-2xl font-extrabold text-gray-100">
                     🚏 {v.nextStopName || '—'}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold tabular-nums text-sky-300">
+                <div className="shrink-0 text-right">
+                  <div className="whitespace-nowrap text-3xl font-extrabold tabular-nums text-sky-300">
                     {v.dwellRemaining > 0 ? '정차 중' : `${Math.max(0, Math.round(v.nextStopDistM))}m`}
                   </div>
-                  <div className="text-[10px] text-gray-600">
+                  <div className="whitespace-nowrap text-[10px] text-gray-600">
                     {v.dwellRemaining > 0 ? '승하차 진행' : '감속 준비 130m 전'}
                   </div>
                 </div>
@@ -181,9 +181,9 @@ export default function DriverApp() {
               )}
               <div className="rounded-xl bg-gray-900/60 px-4 py-3">
                 <div className="text-[11px] text-gray-500">🌱 오늘 절감 기여</div>
-                <div className="mt-1 flex items-end justify-between">
-                  <span className="text-2xl font-bold tabular-nums text-emerald-400">{co2Saved.toFixed(2)}</span>
-                  <span className="pb-0.5 text-[10px] text-gray-500">kg CO₂ · 리워드 적립</span>
+                <div className="mt-1 flex items-end justify-between gap-2">
+                  <span className="text-2xl font-extrabold tabular-nums text-emerald-400">{co2Saved.toFixed(2)}</span>
+                  <span className="shrink-0 pb-0.5 text-[10px] text-gray-500">kg CO₂ 리워드</span>
                 </div>
               </div>
               <div className="mt-auto rounded-xl bg-gray-900/60 px-4 py-3">

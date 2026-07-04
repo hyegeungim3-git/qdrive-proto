@@ -397,8 +397,8 @@ export class SimEngine {
       }
     }
 
-    // 무사고 주행 시 점수 미세 회복
-    v.score = Math.min(100, v.score + 0.004 * dt)
+    // 무사고 주행 시 점수 회복 (이벤트 1건 감점을 약 2~3분 무사고 주행으로 상쇄)
+    v.score = Math.min(100, v.score + 0.015 * dt)
   }
 
   private fireEvent(v: VehicleInternal, type: RiskEventType) {

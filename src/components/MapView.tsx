@@ -63,7 +63,7 @@ export default function MapView({
     <MapContainer
       center={DAEGU_CENTER}
       zoom={13}
-      className="h-full w-full rounded-xl"
+      className="h-full w-full rounded-xl border border-gray-800"
       zoomControl={false}
     >
       <TileLayer

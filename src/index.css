@@ -1,6 +1,50 @@
 @import 'tailwindcss';
 @import 'leaflet/dist/leaflet.css';
 
+/* ── Paperlogy — 브랜드 서체 (300~900, 7웨이트) ── */
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('/fonts/Paperlogy-3Light.ttf') format('truetype');
+  font-weight: 300;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('/fonts/Paperlogy-4Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('/fonts/Paperlogy-5Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('/fonts/Paperlogy-6SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('/fonts/Paperlogy-7Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('/fonts/Paperlogy-8ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('/fonts/Paperlogy-9Black.ttf') format('truetype');
+  font-weight: 900;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
 }
@@ -43,8 +87,23 @@ body {
   margin: 0;
   background: #0b0f17;
   color: var(--color-gray-200, #e5e7eb);
-  font-family: 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif;
+  font-family: 'Paperlogy', 'Segoe UI', 'Malgun Gothic', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* 버튼·입력 등 폼 요소도 브랜드 서체 상속 */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* 포커스 접근성 — 키보드 탐색 시 명확한 링 */
+:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 html.light body {
@@ -129,6 +188,21 @@ html.light .bus-marker .dot {
   }
   50% {
     box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+}
+
+/* 토스트 등장 애니메이션 */
+.toast-in {
+  animation: toast-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 

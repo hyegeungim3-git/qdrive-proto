@@ -15,7 +15,7 @@ export function Panel({
     <div className={`rounded-xl border border-gray-800 bg-gray-900/60 ${className}`}>
       {(title || right) && (
         <div className="flex items-center justify-between border-b border-gray-800 px-4 py-2.5">
-          <div className="text-sm font-semibold text-gray-200">{title}</div>
+          <div className="text-sm font-bold tracking-tight text-gray-100">{title}</div>
           {right}
         </div>
       )}
@@ -38,9 +38,9 @@ export function KpiCard({
   accent?: string
 }) {
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/60 px-4 py-3">
-      <div className="text-[11px] font-medium tracking-wide text-gray-500">{label}</div>
-      <div className={`mt-1 text-2xl font-bold tabular-nums ${accent}`}>
+    <div className="rounded-xl border border-gray-800 bg-gray-900/60 px-4 py-3 transition-colors hover:border-gray-700">
+      <div className="text-[11px] font-semibold tracking-wide text-gray-500">{label}</div>
+      <div className={`mt-1 text-2xl font-extrabold tracking-tight tabular-nums ${accent}`}>
         {value}
         {unit && <span className="ml-1 text-sm font-medium text-gray-400">{unit}</span>}
       </div>
