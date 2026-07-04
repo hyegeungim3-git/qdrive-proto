@@ -195,6 +195,21 @@ html.light .bus-marker .dot {
 .toast-in {
   animation: toast-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
+
+/* 기사 태블릿 경고 토스트 — 위에서 드롭 */
+.warn-drop {
+  animation: warn-drop 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+@keyframes warn-drop {
+  from {
+    transform: translateY(-28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
 @keyframes toast-in {
   from {
     transform: translateY(-8px);

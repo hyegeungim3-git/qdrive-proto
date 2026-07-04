@@ -44,6 +44,19 @@ function ScoreGauge({ score }: { score: number }) {
 
 const WEATHER_ICON = { 맑음: '☀️', 폭우: '🌧️', 폭염: '🥵' } as const
 
+/** 실시간 에코·안전 코칭 — 차량 상태에서 파생 */
+function coaching(v: { dwellRemaining: number; rpm: number; speedKmh: number }, recentWarn: boolean) {
+  if (recentWarn)
+    return { icon: '🛡️', msg: '방금 급조작이 감지됐어요 — 차간거리를 여유 있게 확보하세요', tone: 'warn' as const }
+  if (v.dwellRemaining > 0)
+    return { icon: '🚏', msg: '승하차 중 — 출발 시 완만하게 가속하면 점수·연비 모두 좋아져요', tone: 'ok' as const }
+  if (v.rpm > 2200)
+    return { icon: '⚙️', msg: 'RPM이 높아요 — 정속 유지 시 연료 소모가 줄어듭니다', tone: 'warn' as const }
+  if (v.speedKmh > 52)
+    return { icon: '🚦', msg: '속도가 높습니다 — 여유 운행으로 안전점수를 지키세요', tone: 'warn' as const }
+  return { icon: '👍', msg: '정속 주행 중 — 연비 최적 구간입니다. 좋아요!', tone: 'ok' as const }
+}
+
 export default function DriverApp() {
   const snap = useSim()
   const v = snap.vehicles.find((x) => x.id === DEMO_VEHICLE_ID)!
@@ -53,6 +66,8 @@ export default function DriverApp() {
   const w = snap.weather
   const restDue = snap.simTime > 5400
   const isFaulty = snap.fault?.predicted && snap.fault.vehicleId === v.id
+  const coach = coaching(v, warnActive)
+  const rank = [...snap.vehicles].sort((a, b) => b.score - a.score).findIndex((x) => x.id === v.id) + 1
 
   return (
     <div className="flex h-full flex-col items-center justify-start gap-4 overflow-y-auto py-1">
@@ -148,22 +163,13 @@ export default function DriverApp() {
               </div>
             </div>
 
-            {/* 우: 알림 스택 */}
+            {/* 우: 코칭·랭킹·알림 스택 */}
             <div className="flex flex-col gap-2.5">
               {isFaulty && (
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
                   <div className="text-xs font-bold text-amber-300">🔧 차량 점검 예정</div>
                   <div className="mt-1 text-[11px] leading-relaxed text-amber-200/70">
                     냉각계통 예방정비 — 금일 2회차 종료 후 차고지 입고. 무리한 운행 없이 정상 주행하세요.
-                  </div>
-                </div>
-              )}
-              {restDue && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-                  <div className="text-xs font-bold text-amber-300">☕ 휴게 권장</div>
-                  <div className="mt-1 text-[11px] text-amber-200/70">
-                    연속운행 {Math.floor(snap.simTime / 3600)}시간 {Math.floor((snap.simTime % 3600) / 60)}분 ·
-                    교대 14:00 성서차고지
                   </div>
                 </div>
               )}
@@ -179,6 +185,52 @@ export default function DriverApp() {
                   </div>
                 </div>
               )}
+
+              {/* 실시간 코칭 */}
+              <div
+                className={`rounded-xl border px-4 py-3 ${
+                  coach.tone === 'warn' ? 'border-amber-500/30 bg-amber-500/10' : 'border-emerald-500/25 bg-emerald-500/5'
+                }`}
+              >
+                <div className={`text-[11px] font-bold ${coach.tone === 'warn' ? 'text-amber-300' : 'text-emerald-400'}`}>
+                  {coach.icon} 실시간 코칭
+                </div>
+                <div className="mt-1 text-xs leading-relaxed text-gray-300">{coach.msg}</div>
+              </div>
+
+              {/* 사내 랭킹 (게이미피케이션) */}
+              <div className="rounded-xl bg-gray-900/60 px-4 py-3">
+                <div className="text-[11px] text-gray-500">🏆 오늘 사내 안전운전 순위</div>
+                <div className="mt-1 flex items-end justify-between gap-2">
+                  <span className="text-2xl font-extrabold tabular-nums text-gray-100">
+                    {rank}
+                    <span className="text-sm font-medium text-gray-500">위 / {snap.vehicles.length}명</span>
+                  </span>
+                  <span className="shrink-0 pb-0.5 text-[10px] text-gray-500">
+                    {rank <= 3 ? '리워드 구간 🎖️' : `3위까지 ${rank - 3}계단`}
+                  </span>
+                </div>
+              </div>
+
+              {/* 휴게·교대 (상시 표시, 시간 경과 시 강조) */}
+              <div
+                className={`rounded-xl px-4 py-3 ${
+                  restDue ? 'border border-amber-500/30 bg-amber-500/10' : 'bg-gray-900/60'
+                }`}
+              >
+                <div className={`text-[11px] font-bold ${restDue ? 'text-amber-300' : 'text-gray-500'}`}>
+                  ☕ 휴게·교대
+                </div>
+                <div className={`mt-1 text-xs leading-relaxed ${restDue ? 'text-amber-200/80' : 'text-gray-400'}`}>
+                  {restDue
+                    ? `연속운행 ${Math.floor(snap.simTime / 3600)}시간 ${Math.floor((snap.simTime % 3600) / 60)}분 — 휴게 권장`
+                    : '다음 휴게 회차 종료 후 15분'}
+                  <br />
+                  교대 14:00 · 성서차고지
+                </div>
+              </div>
+
+              {/* 절감 기여 */}
               <div className="rounded-xl bg-gray-900/60 px-4 py-3">
                 <div className="text-[11px] text-gray-500">🌱 오늘 절감 기여</div>
                 <div className="mt-1 flex items-end justify-between gap-2">
@@ -186,6 +238,7 @@ export default function DriverApp() {
                   <span className="shrink-0 pb-0.5 text-[10px] text-gray-500">kg CO₂ 리워드</span>
                 </div>
               </div>
+
               <div className="mt-auto rounded-xl bg-gray-900/60 px-4 py-3">
                 <div className="text-[11px] text-gray-500">📊 오늘 운행</div>
                 <div className="mt-1 grid grid-cols-2 gap-1 text-center">
@@ -202,20 +255,21 @@ export default function DriverApp() {
             </div>
           </div>
 
-          {/* 전체 화면 경고 오버레이 */}
+          {/* 위험운전 경고 — 상단 드롭 토스트 (테마 무관 고정 색상) */}
           {warnActive && v.lastEvent && (
-            /* 경고 오버레이는 테마와 무관하게 고정 색상 (야간·주간 모두 동일 시인성) */
-            <div
-              className="absolute inset-0 z-20 flex items-center justify-center backdrop-blur-[2px]"
-              style={{ background: 'rgba(69, 10, 10, 0.88)' }}
-            >
-              <div className="animate-pulse text-center">
-                <div className="text-7xl">⚠️</div>
-                <div className="mt-2 text-6xl font-black" style={{ color: '#fca5a5' }}>
-                  {v.lastEvent.eventType}
-                </div>
-                <div className="mt-3 text-xl" style={{ color: 'rgba(254, 202, 202, 0.85)' }}>
-                  {v.lastEvent.speedKmh} km/h · 안전운전 부탁드립니다
+            <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex justify-center">
+              <div
+                className="warn-drop flex items-center gap-4 rounded-2xl px-7 py-3.5 shadow-2xl"
+                style={{ background: 'rgba(127, 29, 29, 0.96)', border: '1px solid rgba(248, 113, 113, 0.5)' }}
+              >
+                <span className="text-3xl">⚠️</span>
+                <div>
+                  <div className="text-2xl font-black leading-tight" style={{ color: '#fecaca' }}>
+                    {v.lastEvent.eventType} 감지
+                  </div>
+                  <div className="text-xs" style={{ color: 'rgba(254, 202, 202, 0.75)' }}>
+                    {v.lastEvent.speedKmh} km/h · 안전운전 부탁드립니다
+                  </div>
                 </div>
               </div>
             </div>
