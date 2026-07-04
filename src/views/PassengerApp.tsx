@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
 import { engine, useSim } from '../sim/store'
+import { DEMO_VEHICLE_ID } from '../sim/engine'
 import { ROUTES } from '../sim/routes'
 import { indexPolyline } from '../sim/geo'
 import type { SimSnapshot, VehicleState } from '../sim/types'
@@ -15,22 +17,29 @@ const STOP_M = new Map(
   }),
 )
 
-/** 차량의 반월당까지 잔여거리(m) — 왕복/순환 모두 처리 */
-function remainingToStop(v: VehicleState, loop: boolean, totalM: number): number {
-  const stopM = STOP_M.get(v.routeId)!
+/** 차량의 특정 지점(targetM)까지 잔여거리(m) — 왕복/순환 모두 처리 */
+function remainingToPoint(v: VehicleState, loop: boolean, totalM: number, targetM: number): number {
   if (loop) {
-    return ((stopM - v.odoOnRoute) % totalM + totalM) % totalM
+    return ((targetM - v.odoOnRoute) % totalM + totalM) % totalM
   }
   if (v.dir === 1) {
-    return stopM >= v.odoOnRoute ? stopM - v.odoOnRoute : totalM - v.odoOnRoute + (totalM - stopM)
+    return targetM >= v.odoOnRoute ? targetM - v.odoOnRoute : totalM - v.odoOnRoute + (totalM - targetM)
   }
-  return stopM <= v.odoOnRoute ? v.odoOnRoute - stopM : v.odoOnRoute + stopM
+  return targetM <= v.odoOnRoute ? v.odoOnRoute - targetM : v.odoOnRoute + targetM
 }
 
 function etaMinutes(v: VehicleState, loop: boolean, totalM: number): number {
-  const rem = remainingToStop(v, loop, totalM)
+  const rem = remainingToPoint(v, loop, totalM, STOP_M.get(v.routeId)!)
   const speedMPerMin = (Math.max(v.speedKmh, 16) / 3.6) * 60
   return rem / speedMPerMin
+}
+
+/** 노선 내 정류장 이름 → 폴리라인 상 거리(m) */
+function stopM(routeId: string, name: string): number {
+  const route = ROUTES.find((r) => r.id === routeId)!
+  const idx = ROUTE_IDX.get(routeId)!
+  const s = route.stops.find((x) => x.name === name)!
+  return s.at * idx.totalM
 }
 
 function CongestionBadge({ occupancy }: { occupancy: number }) {
@@ -71,6 +80,49 @@ export default function PassengerApp() {
   const notice = cityNotice(snap)
   const myComplaint = snap.complaints[0]
 
+  /* ── 하차 알림 (졸음·놓침 방지) ── */
+  const [riding, setRiding] = useState<{ vehicleId: string; routeId: string; dest: string } | null>(null)
+  const [pickRoute, setPickRoute] = useState<string | null>(null)
+  const [destSel, setDestSel] = useState('')
+  const wasAtDest = useRef(false)
+
+  const ridingBus = riding ? snap.vehicles.find((x) => x.id === riding.vehicleId) : null
+  const ridingRoute = riding ? ROUTES.find((r) => r.id === riding.routeId)! : null
+  const atDest = !!ridingBus && !!riding && ridingBus.nextStopName === riding.dest
+  const arrivedNow = atDest && ridingBus!.dwellRemaining > 0 && ridingBus!.nextStopDistM < 30
+  const alarmNow = atDest && !arrivedNow
+  const destRemainM =
+    ridingBus && riding && ridingRoute
+      ? remainingToPoint(ridingBus, ridingRoute.loop, ROUTE_IDX.get(riding.routeId)!.totalM, stopM(riding.routeId, riding.dest))
+      : 0
+
+  // 목적지 정차 후 출발하면 자동 종료
+  useEffect(() => {
+    if (arrivedNow) wasAtDest.current = true
+    else if (wasAtDest.current && ridingBus && riding && ridingBus.nextStopName !== riding.dest) {
+      wasAtDest.current = false
+      setRiding(null)
+    }
+  }, [arrivedNow, ridingBus, riding])
+
+  const board = () => {
+    if (!pickRoute || !destSel) return
+    const route = ROUTES.find((r) => r.id === pickRoute)!
+    const idx = ROUTE_IDX.get(pickRoute)!
+    // 급행1은 데모 주인공 차량(3742)에 탑승 — 하차벨이 기사 태블릿 시연으로 이어지도록.
+    // 그 외 노선은 반월당에 가장 먼저 도착하는 버스.
+    const bus =
+      pickRoute === 'R1'
+        ? snap.vehicles.find((v) => v.id === DEMO_VEHICLE_ID)
+        : snap.vehicles
+            .filter((v) => v.routeId === pickRoute)
+            .sort((a, b) => etaMinutes(a, route.loop, idx.totalM) - etaMinutes(b, route.loop, idx.totalM))[0]
+    if (!bus) return
+    setRiding({ vehicleId: bus.id, routeId: pickRoute, dest: destSel })
+    setPickRoute(null)
+    setDestSel('')
+  }
+
   // 노선별 가장 가까운 버스 1~2대
   const arrivals = ROUTES.map((r) => {
     const idx = ROUTE_IDX.get(r.id)!
@@ -105,35 +157,157 @@ export default function PassengerApp() {
             </div>
           </div>
 
-          {/* 도착 정보 */}
-          <div className="space-y-2 px-3 pt-3">
-            {arrivals.map(({ route, buses }) => (
-              <div key={route.id} className="rounded-xl bg-gray-900 px-3 py-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-sm font-bold text-gray-100">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: route.color }} />
-                    {route.name}
-                  </span>
-                  {buses[0] && <CongestionBadge occupancy={buses[0].v.occupancy} />}
-                </div>
-                <div className="mt-1.5 space-y-1">
-                  {buses.map(({ v, eta }, i) => (
-                    <div key={v.id} className="flex items-center justify-between text-[11px]">
-                      <span className={i === 0 ? 'font-bold text-sky-300' : 'text-gray-500'}>
-                        {eta < 1.2 ? '곧 도착' : `${Math.round(eta)}분 후`}
-                        <span className="ml-1.5 font-normal text-gray-600">
-                          신뢰도 {v.speedKmh > 12 ? '높음 ●●●' : '보통 ●●○'}
+          {/* 도착 정보 (탑승 중에는 숨김) */}
+          {!riding && (
+            <div className="space-y-2 px-3 pt-3">
+              {arrivals.map(({ route, buses }) => (
+                <div key={route.id} className="rounded-xl bg-gray-900 px-3 py-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-gray-100">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: route.color }} />
+                      {route.name}
+                    </span>
+                    {buses[0] && <CongestionBadge occupancy={buses[0].v.occupancy} />}
+                  </div>
+                  <div className="mt-1.5 space-y-1">
+                    {buses.map(({ v, eta }, i) => (
+                      <div key={v.id} className="flex items-center justify-between text-[11px]">
+                        <span className={i === 0 ? 'font-bold text-sky-300' : 'text-gray-500'}>
+                          {eta < 1.2 ? '곧 도착' : `${Math.round(eta)}분 후`}
+                          <span className="ml-1.5 font-normal text-gray-600">
+                            신뢰도 {v.speedKmh > 12 ? '높음 ●●●' : '보통 ●●○'}
+                          </span>
                         </span>
-                      </span>
-                      <span className="flex items-center gap-1.5 text-gray-500">
-                        {v.occupancy < 0.7 && <span title="휠체어 공간 이용 가능">♿ 가능</span>}
-                        <span className="font-mono">{v.id.slice(-4)}</span>
-                      </span>
-                    </div>
+                        <span className="flex items-center gap-1.5 text-gray-500">
+                          {v.occupancy < 0.7 && <span title="휠체어 공간 이용 가능">♿ 가능</span>}
+                          <span className="font-mono">{v.id.slice(-4)}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 🔔 하차 알림 — 졸아도 놓치지 않게 */}
+          <div className="px-3 pt-2">
+            {!riding && !pickRoute && (
+              <div className="rounded-xl border border-gray-800 bg-gray-900 px-3 py-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-gray-300">🔔 하차 알림</span>
+                  <span className="text-[9px] text-gray-600">깜빡 졸아도 놓치지 않게</span>
+                </div>
+                <div className="mt-2 flex gap-1.5">
+                  {ROUTES.map((r) => (
+                    <button
+                      key={r.id}
+                      onClick={() => {
+                        setPickRoute(r.id)
+                        setDestSel('')
+                      }}
+                      className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-gray-800 py-1.5 text-[11px] font-bold text-gray-200 hover:bg-gray-700"
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ background: r.color }} />
+                      {r.name} 탑승
+                    </button>
                   ))}
                 </div>
               </div>
-            ))}
+            )}
+
+            {!riding && pickRoute && (
+              <div className="rounded-xl border border-sky-500/30 bg-gray-900 px-3 py-2.5">
+                <div className="text-[11px] font-bold text-sky-300">
+                  🔔 {ROUTES.find((r) => r.id === pickRoute)!.name} — 어디서 내리세요?
+                </div>
+                <div className="mt-2 flex gap-1.5">
+                  <select
+                    value={destSel}
+                    onChange={(e) => setDestSel(e.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1.5 text-[11px] text-gray-200"
+                  >
+                    <option value="">목적지 정류장 선택</option>
+                    {ROUTES.find((r) => r.id === pickRoute)!.stops
+                      .filter((s) => s.name !== STOP_NAME)
+                      .map((s) => (
+                        <option key={s.name} value={s.name}>
+                          {s.name}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    onClick={board}
+                    disabled={!destSel}
+                    className="rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500 disabled:opacity-40"
+                  >
+                    시작
+                  </button>
+                  <button
+                    onClick={() => setPickRoute(null)}
+                    className="rounded-lg border border-gray-700 px-2 py-1.5 text-[11px] text-gray-500"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {riding && ridingBus && ridingRoute && (
+              <div
+                className={`rounded-xl border px-3 py-3 ${
+                  arrivedNow
+                    ? 'border-emerald-500/50 bg-emerald-500/10'
+                    : alarmNow
+                      ? 'animate-pulse border-red-500/60 bg-red-500/15'
+                      : 'border-gray-800 bg-gray-900'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[11px] font-bold text-gray-200">
+                    <span className="h-2 w-2 rounded-full" style={{ background: ridingRoute.color }} />
+                    {ridingRoute.name} {ridingBus.id.slice(-4)}호 탑승 중 → <b className="text-sky-300">{riding.dest}</b>
+                  </span>
+                  <button onClick={() => setRiding(null)} className="text-[10px] text-gray-600 hover:text-gray-400">
+                    해제 ✕
+                  </button>
+                </div>
+
+                {arrivedNow ? (
+                  <div className="mt-2 text-center">
+                    <div className="text-lg font-black text-emerald-400">🚏 {riding.dest} 도착!</div>
+                    <div className="text-[11px] text-emerald-300/80">안녕히 가세요 👋 소지품을 확인하세요</div>
+                  </div>
+                ) : alarmNow ? (
+                  <div className="mt-2 text-center">
+                    <div className="text-lg font-black text-red-300">⏰ 다음 정류장에서 내리세요!</div>
+                    <div className="mb-2 text-[11px] tabular-nums text-red-200/80">
+                      {riding.dest}까지 약 {Math.max(0, Math.round(ridingBus.nextStopDistM))}m
+                    </div>
+                    <button
+                      onClick={() => engine.pressBell(ridingBus.id)}
+                      disabled={ridingBus.bellPressed}
+                      className={`w-full rounded-xl py-2.5 text-sm font-black ${
+                        ridingBus.bellPressed
+                          ? 'bg-emerald-600/30 text-emerald-300'
+                          : 'bg-red-600 text-white hover:bg-red-500'
+                      }`}
+                    >
+                      {ridingBus.bellPressed ? '✓ 하차벨 눌림 — 기사님께 전달됨' : '🔴 하차벨 누르기'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-center justify-between text-[11px]">
+                    <span className="text-gray-400">
+                      😴 편히 가세요 — 도착 전에 <b className="text-gray-200">진동·소리로 깨워드려요</b>
+                    </span>
+                    <span className="shrink-0 tabular-nums text-gray-500">
+                      남은 거리 {(destRemainM / 1000).toFixed(1)}km
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 시민안내 */}
@@ -203,6 +377,11 @@ export default function PassengerApp() {
           <li>
             <b className="text-gray-200">시민안내 에이전트</b> — 정비·배차조정 등 운영 데이터를 시민용
             문장으로 자동 변환. "왜 늦는지"를 알려주는 투명한 안내
+          </li>
+          <li>
+            <b className="text-gray-200">하차 알림</b> — 목적지 정류장을 정해두면 도착 직전 진동·소리로
+            깨워주고, <b className="text-gray-200">앱에서 누른 하차벨이 기사 태블릿에 즉시 표시</b>
+            (졸음·하차 놓침 방지 + 교통약자 배려)
           </li>
           <li>
             <b className="text-gray-200">민원 접수 → 처리 추적</b> — 여기서 접수한 민원이 시티

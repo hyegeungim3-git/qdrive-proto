@@ -289,6 +289,13 @@ export class SimEngine {
     this.emit()
   }
 
+  /** 승객 앱 하차벨 → 기사 태블릿에 즉시 표시 */
+  pressBell(vehicleId: string) {
+    const v = this.vehicles.find((x) => x.id === vehicleId)
+    if (v) v.bellPressed = true
+    this.emit()
+  }
+
   /* ── 시뮬레이션 스텝 ─────────────────────────────────────── */
 
   private step(dt: number) {
@@ -315,6 +322,7 @@ export class SimEngine {
       v.fuelM3 += IDLE_FUEL_PER_S * dt
       v.baselineFuelM3 += IDLE_FUEL_PER_S * dt * (1 + BASELINE_PENALTY[v.persona] * 0.3)
       if (v.dwellRemaining <= 0) {
+        v.bellPressed = false // 정류장 출발 시 하차벨 해제
         v.nextStopM = this.findNextStop(v, ctx.stopDists, ctx.idx.totalM)
       }
       return
@@ -499,6 +507,7 @@ export class SimEngine {
       occupancy: 0.25 + Math.random() * 0.35,
       nextStopName: '',
       nextStopDistM: 0,
+      bellPressed: false,
       targetSpeed: 0,
       nextStopM: 0,
       tripStartTime: 0,

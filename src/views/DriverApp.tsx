@@ -87,6 +87,11 @@ export default function DriverApp() {
               </span>
             </div>
             <div className="flex items-center gap-4 text-sm">
+              {v.bellPressed && (
+                <span className="animate-pulse whitespace-nowrap rounded-md border border-red-500/50 bg-red-500/20 px-2.5 py-0.5 text-xs font-black text-red-300">
+                  🔔 하차벨
+                </span>
+              )}
               <span className="text-gray-400">
                 {WEATHER_ICON[w.condition]} {w.condition} {w.tempC}°C
                 {w.condition === '폭우' && <b className="ml-1 text-sky-300">노면 주의</b>}

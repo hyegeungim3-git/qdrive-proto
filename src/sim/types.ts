@@ -90,6 +90,8 @@ export interface VehicleState {
   /** 다음 정류장 이름 · 잔여거리(m) — 인포테인먼트 표출용 */
   nextStopName: string
   nextStopDistM: number
+  /** 하차벨 (승객 앱 → 기사 태블릿 연동) */
+  bellPressed: boolean
   distanceKm: number
   fuelM3: number
   co2Kg: number

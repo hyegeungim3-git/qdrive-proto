@@ -10,6 +10,11 @@ import type { SimSnapshot } from './types'
 export const engine = new SimEngine()
 engine.start()
 
+// 개발·데모 편의: 콘솔에서 시나리오 구동 가능 (window.__engine)
+if (import.meta.env.DEV) {
+  ;(window as unknown as Record<string, unknown>).__engine = engine
+}
+
 export function useSim(): SimSnapshot {
   return useSyncExternalStore(engine.subscribe, engine.getSnapshot)
 }
