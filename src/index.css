@@ -136,20 +136,21 @@ html.light .leaflet-control-attribution {
   color: #64748b !important;
 }
 
-/* 버스 마커 */
+/* 버스 마커 — 측면 버스 SVG */
 .bus-marker {
   display: flex;
   align-items: center;
   gap: 3px;
   white-space: nowrap;
-  transform: translate(-8px, -8px);
+  transform: translate(-14px, -9px);
 }
-.bus-marker .dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 9999px;
-  border: 2px solid #0b0f17;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+.bus-marker .bus-body {
+  display: block;
+  line-height: 0;
+}
+.bus-marker .bus-svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 .bus-marker .label {
   font-size: 10px;
@@ -165,30 +166,28 @@ html.light .bus-marker .label {
   background: rgba(255, 255, 255, 0.9);
   border-color: #cbd5e1;
 }
-html.light .bus-marker .dot {
-  border-color: #ffffff;
+html.light .bus-marker .bus-svg {
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.35));
 }
-.bus-marker.warn .dot {
-  animation: pulse-red 0.9s ease-in-out infinite;
+.bus-marker.warn .bus-svg {
+  animation: bus-warn 0.9s ease-in-out infinite;
 }
-/* BIS 실데이터 버스 — 속이 빈 마커로 시뮬레이션과 구분 */
-.bus-marker.real .dot {
-  background: transparent;
-  border: 3px solid #38bdf8;
-  box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+@keyframes bus-warn {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.95));
+  }
+}
+/* BIS 실데이터 버스 — 아웃라인 차체로 시뮬레이션과 구분 */
+.bus-marker.real .bus-svg {
+  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.55));
 }
 .bus-marker.real .label {
   color: #38bdf8;
   border-color: rgba(56, 189, 248, 0.4);
-}
-@keyframes pulse-red {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-  }
-  50% {
-    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
-  }
 }
 
 /* 토스트 등장 애니메이션 */

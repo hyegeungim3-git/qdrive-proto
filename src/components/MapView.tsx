@@ -9,11 +9,29 @@ import type { Packet409, VehicleState } from '../sim/types'
 
 const ROUTE_IDX = new Map(ROUTES.map((r) => [r.id, indexPolyline(r.points)]))
 
+/** 측면 버스 SVG — 노선색 차체 + 창문 + 바퀴 */
+function busSvg(fill: string, outline = false): string {
+  const stroke = outline ? '#38bdf8' : 'rgba(0,0,0,0.45)'
+  const body = outline ? 'rgba(56,189,248,0.18)' : fill
+  const win = outline ? 'rgba(56,189,248,0.6)' : 'rgba(255,255,255,0.88)'
+  return `<svg class="bus-svg" width="28" height="16" viewBox="0 0 28 16" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1" y="1.5" width="26" height="10.5" rx="3" fill="${body}" stroke="${stroke}" stroke-width="${outline ? 1.6 : 1}"/>
+    <rect x="3.6" y="3.6" width="4.1" height="3.6" rx="1" fill="${win}"/>
+    <rect x="9" y="3.6" width="4.1" height="3.6" rx="1" fill="${win}"/>
+    <rect x="14.4" y="3.6" width="4.1" height="3.6" rx="1" fill="${win}"/>
+    <rect x="19.8" y="3.6" width="4.6" height="5.8" rx="1" fill="${win}"/>
+    <circle cx="7.5" cy="13" r="2.3" fill="#1f2937" stroke="#9ca3af" stroke-width="0.8"/>
+    <circle cx="20.5" cy="13" r="2.3" fill="#1f2937" stroke="#9ca3af" stroke-width="0.8"/>
+  </svg>`
+}
+
 function busIcon(v: VehicleState, color: string, warn: boolean): L.DivIcon {
+  // 대략적 진행 방향으로 차체 방향 전환 (기본: 동쪽/우향)
+  const flip = v.headingDeg > 180
   return L.divIcon({
     className: '',
     html: `<div class="bus-marker${warn ? ' warn' : ''}">
-      <span class="dot" style="background:${color}"></span>
+      <span class="bus-body"${flip ? ' style="transform:scaleX(-1)"' : ''}>${busSvg(color)}</span>
       <span class="label">${v.id.slice(-4)}</span>
     </div>`,
     iconSize: [0, 0],
@@ -36,7 +54,7 @@ function realBusIcon(b: RealBus): L.DivIcon {
   return L.divIcon({
     className: '',
     html: `<div class="bus-marker real">
-      <span class="dot"></span>
+      <span class="bus-body">${busSvg('#38bdf8', true)}</span>
       <span class="label">실 ${b.routeNo}</span>
     </div>`,
     iconSize: [0, 0],
