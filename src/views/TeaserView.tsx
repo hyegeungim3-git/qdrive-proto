@@ -151,45 +151,6 @@ export default function TeaserView() {
         })}
       </div>
 
-      {/* 구독서비스 — qdrive.co.kr "ESG 실천을 위한 스마트 플랜" 반영 */}
-      <div className="rounded-xl border border-gray-800 bg-gray-900/60 px-5 py-4">
-        <div className="flex items-baseline justify-between">
-          <div className="text-sm font-bold text-gray-100">💳 구독서비스 — ESG 실천을 위한 스마트 플랜</div>
-          <span className="text-[10px] text-gray-500">qdrive.co.kr 요금제 × 본 플랫폼 기능 매핑 (구성안)</span>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          {[
-            {
-              name: 'Basic',
-              tone: 'border-gray-700',
-              badge: 'bg-gray-700/50 text-gray-300',
-              items: ['DTG 운행기록 + eTAS 자동제출', '운전자용 앱 (점수·리포트)', '운행 이력 조회'],
-            },
-            {
-              name: 'Premium',
-              tone: 'border-sky-500/40',
-              badge: 'bg-sky-500/20 text-sky-300',
-              items: ['Basic 전체 포함', '실시간 관제·진단 스캐너·예지정비', '연비·연료 관리 + 월간 리포트'],
-            },
-            {
-              name: 'Platinum',
-              tone: 'border-emerald-500/40',
-              badge: 'bg-emerald-500/20 text-emerald-300',
-              items: ['Premium 전체 포함', 'Agentic 조치 권고 + 정산 검증', '탄소배출권 연계·시민 접점(MaaS)'],
-            },
-          ].map((p) => (
-            <div key={p.name} className={`rounded-xl border bg-gray-900/60 px-4 py-3 ${p.tone}`}>
-              <span className={`rounded-md px-2 py-0.5 text-[11px] font-black ${p.badge}`}>{p.name}</span>
-              <ul className="mt-2 space-y-1 text-[11px] leading-relaxed text-gray-400">
-                {p.items.map((it) => (
-                  <li key={it}>· {it}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
         <div className="text-sm font-bold text-violet-300">💡 선순환 구조 (As-Is → To-Be)</div>
         <div className="mt-1.5 text-xs leading-relaxed text-gray-400">
