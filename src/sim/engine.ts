@@ -107,6 +107,9 @@ export class SimEngine {
   private bunchingTimer = 0
   private weather: WeatherState = { condition: '맑음', tempC: 24, rainMm: 0, delayForecastMin: 0, demandDeltaPct: 0 }
   private reservation: AlightReservation | null = null
+  private totalBoardings = 0
+  private occHistory: { t: number; pct: number }[] = []
+  private occSampleTimer = 0
 
   simTime = 0
   running = true
@@ -321,6 +324,14 @@ export class SimEngine {
       this.bunchingTimer = 0
       this.createBunchingRecommendation()
     }
+    // 혼잡 추이 샘플 (30초마다 평균 재차율)
+    this.occSampleTimer += dt
+    if (this.occSampleTimer >= 30) {
+      this.occSampleTimer = 0
+      const avg = this.vehicles.reduce((s, v) => s + v.occupancy, 0) / this.vehicles.length
+      this.occHistory.push({ t: this.simTime, pct: Math.round(avg * 100) })
+      if (this.occHistory.length > 48) this.occHistory.shift()
+    }
   }
 
   private stepVehicle(v: VehicleInternal, dt: number) {
@@ -395,8 +406,10 @@ export class SimEngine {
         const r = this.recommendations.find((x) => x.vehicleId === v.id && x.status === '승인됨')
         if (r) r.status = '실행완료'
       }
-      // 승하차 — 재차율 변동 (APC 상당)
+      // 승하차 — 재차율 변동 (APC 상당) + 탑승객 집계 (CNG 시내버스 정원 ~45명 기준)
+      const occBefore = v.occupancy
       v.occupancy = Math.min(0.95, Math.max(0.08, v.occupancy + (Math.random() * 0.5 - 0.22)))
+      this.totalBoardings += Math.max(1, Math.round(Math.max(0, v.occupancy - occBefore) * 45 + Math.random() * 5))
       v.speedKmh = 0
     }
 
@@ -585,6 +598,8 @@ export class SimEngine {
       recommendations: this.recommendations.map((r) => ({ ...r })),
       workOrders: this.workOrders.map((w) => ({ ...w })),
       reservation: this.reservation ? { ...this.reservation } : null,
+      passengers: this.totalBoardings,
+      occHistory: [...this.occHistory],
       kpi: {
         totalDistanceKm: totalDist,
         totalFuelM3: totalFuel,

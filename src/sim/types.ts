@@ -181,6 +181,10 @@ export interface SimSnapshot {
   recommendations: DispatchRecommendation[]
   workOrders: WorkOrder[]
   reservation: AlightReservation | null
+  /** 오늘 누적 탑승객 (정류장 승차 집계) */
+  passengers: number
+  /** 평균 재차율 시계열 (30초 샘플, 혼잡 추이 차트용) */
+  occHistory: { t: number; pct: number }[]
   kpi: {
     totalDistanceKm: number
     totalFuelM3: number

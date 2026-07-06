@@ -1,9 +1,62 @@
 import { useState } from 'react'
+import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts'
 import MapView from '../components/MapView'
 import { KpiCard, Panel, simClock } from '../components/ui'
 import { engine, useSim } from '../sim/store'
 import { DEFAULT_ROUTES, getBisKey, setBisKey, startBis, stopBis, useBis } from '../sim/bis'
 import { ROUTES } from '../sim/routes'
+
+/* ── 위젯 커스터마이즈 (표시 여부 localStorage 유지) ── */
+type WidgetId = 'ops' | 'riders' | 'alerts' | 'occ' | 'kpi' | 'bis' | 'routes' | 'feed'
+const WIDGET_DEFS: { id: WidgetId; label: string }[] = [
+  { id: 'ops', label: '운행 현황' },
+  { id: 'riders', label: '이용객 수' },
+  { id: 'alerts', label: '이상 현황' },
+  { id: 'occ', label: '혼잡 추이' },
+  { id: 'kpi', label: '핵심 지표' },
+  { id: 'bis', label: 'BIS 실데이터' },
+  { id: 'routes', label: '노선 평가·정산' },
+  { id: 'feed', label: '이벤트 피드' },
+]
+const PREFS_KEY = 'qdrive-widgets-v1'
+const DEFAULT_PREFS = Object.fromEntries(WIDGET_DEFS.map((w) => [w.id, true])) as Record<WidgetId, boolean>
+
+function loadPrefs(): Record<WidgetId, boolean> {
+  try {
+    return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') }
+  } catch {
+    return { ...DEFAULT_PREFS }
+  }
+}
+
+/** 운행률 미니 도넛 */
+function MiniDonut({ pct }: { pct: number }) {
+  const r = 26
+  const c = 2 * Math.PI * r
+  return (
+    <div className="relative h-16 w-16 shrink-0">
+      <svg width="64" height="64" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r={r} fill="none" stroke="var(--color-gray-800)" strokeWidth="7" />
+        <circle
+          cx="32"
+          cy="32"
+          r={r}
+          fill="none"
+          stroke="#38bdf8"
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={`${(c * Math.min(100, pct)) / 100} ${c}`}
+          transform="rotate(-90 32 32)"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center text-sm font-extrabold tabular-nums text-gray-100">
+        {Math.round(pct)}%
+      </div>
+    </div>
+  )
+}
+
+const WEATHER_ICON = { 맑음: '☀️', 폭우: '🌧️', 폭염: '🥵' } as const
 
 export default function CityDashboard() {
   const snap = useSim()
@@ -11,6 +64,24 @@ export default function CityDashboard() {
   const bis = useBis()
   const [keyInput, setKeyInput] = useState(getBisKey())
   const [showKeyForm, setShowKeyForm] = useState(false)
+  const [prefs, setPrefs] = useState<Record<WidgetId, boolean>>(loadPrefs)
+  const [showPrefs, setShowPrefs] = useState(false)
+  const [routeFilter, setRouteFilter] = useState<Set<string>>(new Set(DEFAULT_ROUTES))
+
+  const togglePref = (id: WidgetId) =>
+    setPrefs((p) => {
+      const next = { ...p, [id]: !p[id] }
+      localStorage.setItem(PREFS_KEY, JSON.stringify(next))
+      return next
+    })
+
+  const toggleRoute = (no: string) =>
+    setRouteFilter((s) => {
+      const next = new Set(s)
+      if (next.has(no)) next.delete(no)
+      else next.add(no)
+      return next
+    })
 
   // 원인식별 단계 이상의 민원이 있으면 해당 노선 하이라이트
   const activeComplaint = snap.complaints.find((c) => c.status !== '해결')
@@ -18,18 +89,169 @@ export default function CityDashboard() {
     activeComplaint && activeComplaint.status !== '접수' ? activeComplaint.routeId : null
 
   const { kpi } = snap
+  const filteredReal = bis.buses.filter((b) => routeFilter.has(b.routeNo))
+
+  /* ── 운행 현황 (예시 대시보드 벤치마킹) ── */
+  const PLANNED = 12
+  const running = snap.vehicles.length
+  const maint = snap.workOrders.filter((w) => w.status === '발행됨').length
+  const reserve = Math.max(0, PLANNED - running - maint - 1)
+  const opRate = (running / PLANNED) * 100
+
+  /* ── 이상 현황 집계 (최근 5분 / 누적) ── */
+  const RECENT_S = 300
+  const countBy = (types: string[], recentOnly: boolean) =>
+    snap.events.filter(
+      (e) => types.includes(e.eventType) && (!recentOnly || snap.simTime - e.simTime < RECENT_S),
+    ).length
+  const longDwell = snap.vehicles.filter((v) => v.dwellRemaining > 25).length
+  const alertRows: { label: string; color: string; recent: number | string; total: number | string }[] = [
+    { label: '급가속·급출발', color: '#f97316', recent: countBy(['급가속', '급출발'], true), total: countBy(['급가속', '급출발'], false) },
+    { label: '급감속·급정지', color: '#ef4444', recent: countBy(['급감속', '급정지'], true), total: countBy(['급감속', '급정지'], false) },
+    { label: '급차로·급회전', color: '#8b5cf6', recent: countBy(['급진로변경', '급앞지르기', '급좌우회전', '급유턴'], true), total: countBy(['급진로변경', '급앞지르기', '급좌우회전', '급유턴'], false) },
+    { label: '장시간 정차', color: '#eab308', recent: longDwell, total: '—' },
+    { label: '차량 고장 예측', color: '#f59e0b', recent: snap.fault?.predicted ? 1 : 0, total: snap.workOrders.length },
+  ]
+
+  /* ── 이용객 (엔진 승차 집계) ── */
+  const cardShare = Math.round(snap.passengers * 0.85)
 
   return (
-    <div className="grid h-full grid-cols-[1fr_360px] gap-4">
-      {/* 지도 */}
+    <div className="grid h-full grid-cols-[280px_1fr_360px] gap-3">
+      {/* ── 좌: 운영 통계 (신규) ── */}
+      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
+        {/* 위젯 구성 */}
+        <div className="relative">
+          <button
+            onClick={() => setShowPrefs((s) => !s)}
+            className="w-full rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-1.5 text-left text-[11px] font-semibold text-gray-400 hover:text-gray-200"
+          >
+            ⚙ 위젯 구성 <span className="float-right text-gray-600">{showPrefs ? '▲' : '▼'}</span>
+          </button>
+          {showPrefs && (
+            <div className="absolute inset-x-0 top-9 z-[1200] rounded-lg border border-gray-700 bg-gray-900 p-2 shadow-2xl">
+              {WIDGET_DEFS.map((w) => (
+                <label key={w.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[11px] text-gray-300 hover:bg-gray-800">
+                  <input type="checkbox" checked={prefs[w.id]} onChange={() => togglePref(w.id)} className="h-3 w-3 accent-sky-500" />
+                  {w.label}
+                </label>
+              ))}
+              <div className="mt-1 border-t border-gray-800 px-2 pt-1 text-[9px] text-gray-600">선택은 브라우저에 저장됩니다</div>
+            </div>
+          )}
+        </div>
+
+        {prefs.ops && (
+          <Panel title="🚌 운행 현황" right={<span className="text-[10px] text-gray-500">계획 {PLANNED}대</span>}>
+            <div className="flex items-center gap-3">
+              <MiniDonut pct={opRate} />
+              <div className="grid flex-1 grid-cols-2 gap-1 text-center text-[11px]">
+                <div className="rounded-md bg-sky-500/10 py-1.5">
+                  <div className="text-base font-extrabold tabular-nums text-sky-300">{running}</div>
+                  <div className="text-[9px] text-gray-500">운행 중</div>
+                </div>
+                <div className="rounded-md bg-gray-800/60 py-1.5">
+                  <div className="text-base font-extrabold tabular-nums text-gray-300">{reserve}</div>
+                  <div className="text-[9px] text-gray-500">예비 대기</div>
+                </div>
+                <div className={`rounded-md py-1.5 ${maint > 0 ? 'bg-amber-500/10' : 'bg-gray-800/60'}`}>
+                  <div className={`text-base font-extrabold tabular-nums ${maint > 0 ? 'text-amber-400' : 'text-gray-300'}`}>{maint}</div>
+                  <div className="text-[9px] text-gray-500">정비 입고</div>
+                </div>
+                <div className="rounded-md bg-gray-800/60 py-1.5">
+                  <div className="text-base font-extrabold tabular-nums text-emerald-400">0</div>
+                  <div className="text-[9px] text-gray-500">결행</div>
+                </div>
+              </div>
+            </div>
+          </Panel>
+        )}
+
+        {prefs.riders && (
+          <Panel title="🧍 이용객 수" right={<span className="text-[10px] text-gray-500">오늘 누적</span>}>
+            <div className="flex items-end justify-between">
+              <span className="text-3xl font-extrabold tracking-tight tabular-nums text-gray-100">
+                {snap.passengers.toLocaleString()}
+                <span className="ml-1 text-sm font-medium text-gray-500">명</span>
+              </span>
+              <span className="pb-1 text-[10px] font-semibold text-emerald-400">▲ 10.5% 전일比*</span>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-1 text-center text-[11px]">
+              <div className="rounded-md bg-gray-800/50 py-1.5">
+                <div className="font-bold tabular-nums text-gray-200">{cardShare.toLocaleString()}</div>
+                <div className="text-[9px] text-gray-500">교통카드</div>
+              </div>
+              <div className="rounded-md bg-gray-800/50 py-1.5">
+                <div className="font-bold tabular-nums text-gray-200">{(snap.passengers - cardShare).toLocaleString()}</div>
+                <div className="text-[9px] text-gray-500">현금·기타</div>
+              </div>
+            </div>
+            <div className="mt-1.5 text-[9px] text-gray-600">* 전일 대비는 데모 추정치 · 실증 시 AFC 연동</div>
+          </Panel>
+        )}
+
+        {prefs.alerts && (
+          <Panel title="⚠️ 이상 현황" right={<span className="text-[10px] text-gray-500">최근 5분 / 누적</span>}>
+            <div className="space-y-1">
+              {alertRows.map((r) => (
+                <div key={r.label} className="flex items-center justify-between rounded-md bg-gray-800/40 px-2.5 py-1.5 text-[11px]">
+                  <span className="flex items-center gap-1.5 text-gray-300">
+                    <span className="h-2 w-2 rounded-sm" style={{ background: r.color }} />
+                    {r.label}
+                  </span>
+                  <span className="tabular-nums text-gray-400">
+                    <b className={Number(r.recent) > 0 ? 'text-red-400' : 'text-gray-300'}>{r.recent}</b>
+                    <span className="mx-1 text-gray-600">/</span>
+                    {r.total}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        {prefs.occ && (
+          <Panel
+            title="📈 혼잡 추이"
+            right={
+              <span className="text-[10px] tabular-nums text-gray-500">
+                현재 평균 {snap.occHistory.length ? snap.occHistory[snap.occHistory.length - 1].pct : '—'}%
+              </span>
+            }
+          >
+            <div className="h-20">
+              {snap.occHistory.length > 1 ? (
+                <ResponsiveContainer>
+                  <AreaChart data={snap.occHistory} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                    <YAxis domain={[0, 100]} hide />
+                    <Area type="monotone" dataKey="pct" stroke="#38bdf8" strokeWidth={2} fill="rgba(56,189,248,0.15)" isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-[10px] text-gray-600">
+                  수집 중… (30초 간격 평균 재차율)
+                </div>
+              )}
+            </div>
+          </Panel>
+        )}
+      </div>
+
+      {/* ── 중: 지도 ── */}
       <div className="relative min-h-0">
         <MapView
           vehicles={snap.vehicles}
           events={snap.events}
           showHeat={showHeat}
           highlightRouteId={highlightRouteId}
-          realBuses={bis.buses}
+          realBuses={filteredReal}
         />
+        {/* 날씨 칩 */}
+        <div className="absolute left-3 top-3 z-[1000] flex items-center gap-2 rounded-md border border-gray-800 bg-gray-900/90 px-3 py-1.5 text-xs text-gray-300">
+          {WEATHER_ICON[snap.weather.condition]} {snap.weather.tempC}°C
+          <span className="text-gray-600">|</span>
+          <span className="text-gray-500">대구광역시 · {simClock(snap.simTime)}</span>
+        </div>
         <button
           onClick={() => setShowHeat((s) => !s)}
           className={`absolute right-3 top-3 z-[1000] rounded-md border px-3 py-1.5 text-xs font-semibold shadow-lg ${
@@ -40,6 +262,26 @@ export default function CityDashboard() {
         >
           🔥 위험운전 히트맵 {showHeat ? 'ON' : 'OFF'}
         </button>
+        {/* 실차 노선 필터 */}
+        {bis.status === 'ok' && (
+          <div className="absolute right-3 top-12 z-[1000] flex flex-col items-end gap-1">
+            {DEFAULT_ROUTES.map((no) => {
+              const cnt = bis.buses.filter((b) => b.routeNo === no).length
+              const on = routeFilter.has(no)
+              return (
+                <button
+                  key={no}
+                  onClick={() => toggleRoute(no)}
+                  className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold shadow ${
+                    on ? 'border-sky-500/50 bg-sky-500/20 text-sky-300' : 'border-gray-700 bg-gray-900/90 text-gray-600'
+                  }`}
+                >
+                  실 {no} {cnt}
+                </button>
+              )
+            })}
+          </div>
+        )}
         <div className="absolute bottom-3 left-3 z-[1000] flex gap-3 rounded-md border border-gray-800 bg-gray-900/90 px-3 py-2 text-[11px]">
           {ROUTES.map((r) => (
             <span key={r.id} className="flex items-center gap-1.5 text-gray-300">
@@ -50,117 +292,133 @@ export default function CityDashboard() {
         </div>
       </div>
 
-      {/* 우측 패널 */}
+      {/* ── 우: 기존 패널 ── */}
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
-        <div className="grid grid-cols-2 gap-3">
-          <KpiCard label="운행 차량" value={String(snap.vehicles.length)} unit="대" sub="3개 노선 실증" />
-          <KpiCard
-            label="총 주행거리"
-            value={kpi.totalDistanceKm.toFixed(1)}
-            unit="km"
-            sub="오늘 누적"
-          />
-          <KpiCard
-            label="연료 절감률"
-            value={kpi.fuelSavedPct.toFixed(1)}
-            unit="%"
-            sub="기준선 대비 (코칭 효과)"
-            accent="text-emerald-400"
-          />
-          <KpiCard
-            label="CO₂ 절감"
-            value={kpi.totalCo2SavedKg.toFixed(1)}
-            unit="kg"
-            sub="탄소중립 기여"
-            accent="text-emerald-400"
-          />
-        </div>
+        {prefs.kpi && (
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCard label="운행 차량" value={String(snap.vehicles.length)} unit="대" sub="3개 노선 실증" />
+            <KpiCard
+              label="총 주행거리"
+              value={kpi.totalDistanceKm.toFixed(1)}
+              unit="km"
+              sub="오늘 누적"
+            />
+            <KpiCard
+              label="연료 절감률"
+              value={kpi.fuelSavedPct.toFixed(1)}
+              unit="%"
+              sub="기준선 대비 (코칭 효과)"
+              accent="text-emerald-400"
+            />
+            <KpiCard
+              label="CO₂ 절감"
+              value={kpi.totalCo2SavedKg.toFixed(1)}
+              unit="kg"
+              sub="탄소중립 기여"
+              accent="text-emerald-400"
+            />
+          </div>
+        )}
 
         {/* BIS 실데이터 연동 (TAGO 오픈API) */}
-        <Panel
-          title="📡 대구 BIS 실데이터"
-          right={
-            bis.status === 'ok' ? (
-              <span className="text-[11px] font-bold text-sky-400">
-                ● 실차 {bis.buses.length}대 수신 중
-              </span>
-            ) : (
-              <span className="text-[11px] text-gray-500">TAGO 오픈API · 15초 갱신</span>
-            )
-          }
-        >
-          <div className="space-y-2 text-xs">
-            {bis.status === 'idle' && (
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500">
-                  실제 대구 버스({DEFAULT_ROUTES.join('·')}) 위치를 지도에 오버레이
-                  {!import.meta.env.DEV && ' — 프록시 경유, 키 입력 불필요'}
+        {prefs.bis && (
+          <Panel
+            title="📡 대구 BIS 실데이터"
+            right={
+              bis.status === 'ok' ? (
+                <span className="text-[11px] font-bold text-sky-400">
+                  ● 실차 {bis.buses.length}대 수신 중
                 </span>
-                <button
-                  onClick={() => (import.meta.env.DEV && !getBisKey() ? setShowKeyForm(true) : startBis())}
-                  className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
-                >
-                  연동 시작
-                </button>
-              </div>
-            )}
-            {bis.status === 'loading' && <div className="text-sky-300">⏳ {bis.message || '연결 중…'}</div>}
-            {bis.status === 'ok' && (
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400">
-                  {bis.matchedRoutes.join(' · ')} — 지도에서 <b className="text-sky-400">속이 빈 하늘색 마커</b>가
-                  실차 (시뮬레이션과 나란히 표시)
-                </span>
-                <button
-                  onClick={stopBis}
-                  className="rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
-                >
-                  중지
-                </button>
-              </div>
-            )}
-            {bis.status === 'error' && (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-red-400">⚠ {bis.message}</span>
-                {import.meta.env.DEV ? (
-                  <button
-                    onClick={() => setShowKeyForm(true)}
-                    className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
-                  >
-                    키 설정
-                  </button>
+              ) : (
+                <span className="text-[11px] text-gray-500">TAGO 오픈API · 15초 갱신</span>
+              )
+            }
+          >
+            <div className="space-y-2 text-xs">
+              {bis.status === 'idle' &&
+                (import.meta.env.DEV ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">
+                      실제 대구 버스({DEFAULT_ROUTES.join('·')}) 위치를 지도에 오버레이
+                    </span>
+                    <button
+                      onClick={() => (getBisKey() ? startBis() : setShowKeyForm(true))}
+                      className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
+                    >
+                      연동 시작
+                    </button>
+                  </div>
                 ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">
+                      실제 대구 버스({DEFAULT_ROUTES.join('·')}) 위치를 지도에 오버레이 — 프록시 경유, 키 입력 불필요
+                    </span>
+                    <button
+                      onClick={() => startBis()}
+                      className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
+                    >
+                      연동 시작
+                    </button>
+                  </div>
+                ))}
+              {bis.status === 'loading' && <div className="text-sky-300">⏳ {bis.message || '연결 중…'}</div>}
+              {bis.status === 'ok' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">
+                    {bis.matchedRoutes.join(' · ')} — 지도에서 <b className="text-sky-400">아웃라인 버스</b>가
+                    실차 (시뮬레이션과 나란히 표시)
+                  </span>
                   <button
-                    onClick={() => startBis()}
-                    className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
+                    onClick={stopBis}
+                    className="rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
                   >
-                    다시 시도
+                    중지
                   </button>
-                )}
-              </div>
-            )}
-            {import.meta.env.DEV && (showKeyForm || (bis.status === 'error' && !getBisKey())) && (
-              <div className="flex gap-2">
-                <input
-                  value={keyInput}
-                  onChange={(e) => setKeyInput(e.target.value)}
-                  placeholder="공공데이터포털 일반 인증키 (data.go.kr 발급)"
-                  className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-[11px] text-gray-200 placeholder:text-gray-600 focus:border-sky-500/60 focus:outline-none"
-                />
-                <button
-                  onClick={() => {
-                    setBisKey(keyInput)
-                    setShowKeyForm(false)
-                    startBis()
-                  }}
-                  className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
-                >
-                  저장·시작
-                </button>
-              </div>
-            )}
-          </div>
-        </Panel>
+                </div>
+              )}
+              {bis.status === 'error' && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-red-400">⚠ {bis.message}</span>
+                  {import.meta.env.DEV ? (
+                    <button
+                      onClick={() => setShowKeyForm(true)}
+                      className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
+                    >
+                      키 설정
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => startBis()}
+                      className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
+                    >
+                      다시 시도
+                    </button>
+                  )}
+                </div>
+              )}
+              {import.meta.env.DEV && (showKeyForm || (bis.status === 'error' && !getBisKey())) && (
+                <div className="flex gap-2">
+                  <input
+                    value={keyInput}
+                    onChange={(e) => setKeyInput(e.target.value)}
+                    placeholder="공공데이터포털 일반 인증키 (data.go.kr 발급)"
+                    className="flex-1 rounded-md border border-gray-700 bg-gray-900 px-2.5 py-1.5 text-[11px] text-gray-200 placeholder:text-gray-600 focus:border-sky-500/60 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      setBisKey(keyInput)
+                      setShowKeyForm(false)
+                      startBis()
+                    }}
+                    className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
+                  >
+                    저장·시작
+                  </button>
+                </div>
+              )}
+            </div>
+          </Panel>
+        )}
 
         {/* 날씨/행사 기반 수요·지연·사고위험 예측 */}
         {snap.weather.condition !== '맑음' && (
@@ -267,68 +525,72 @@ export default function CityDashboard() {
         )}
 
         {/* 노선 평가 (준공영제 과학행정) */}
-        <Panel title="노선 평가 · 준공영제 정산 검증" right={<span className="text-[11px] text-gray-500">BMS×DTG 교차검증</span>}>
-          <table className="w-full text-left text-[11px]">
-            <thead>
-              <tr className="text-[10px] text-gray-500">
-                <th className="pb-1.5 font-medium">노선</th>
-                <th className="pb-1.5 font-medium">정시율</th>
-                <th className="pb-1.5 font-medium">평균 안전점수</th>
-                <th className="pb-1.5 font-medium">위험운전</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ROUTES.map((r, ri) => {
-                const buses = snap.vehicles.filter((v) => v.routeId === r.id)
-                const avg = buses.reduce((s, v) => s + v.score, 0) / buses.length
-                const ev = snap.events.filter((e) => buses.some((b) => b.id === e.vehicleId)).length
-                return (
-                  <tr key={r.id} className="border-t border-gray-800/50">
-                    <td className="py-1.5">
-                      <span className="flex items-center gap-1.5 text-gray-300">
-                        <span className="h-2 w-2 rounded-full" style={{ background: r.color }} />
-                        {r.name}
-                      </span>
-                    </td>
-                    <td className="py-1.5 tabular-nums text-gray-400">{[96.2, 93.8, 95.1][ri]}%</td>
-                    <td className="py-1.5 tabular-nums text-gray-400">{avg.toFixed(1)}점</td>
-                    <td className={`py-1.5 tabular-nums ${ev > 8 ? 'text-red-400' : 'text-gray-400'}`}>{ev}건</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          {snap.trips.length > 4 && (
-            <div className="mt-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-[10px] leading-relaxed text-amber-300/80">
-              ⚠ 정산 검증 에이전트: 5563호 3회차 — BMS상 정상운행, DTG 위치이력상 인가노선{' '}
-              <b>87% 운행</b>. 검토 필요 (최종 판단: 담당자)
-            </div>
-          )}
-        </Panel>
+        {prefs.routes && (
+          <Panel title="노선 평가 · 준공영제 정산 검증" right={<span className="text-[11px] text-gray-500">BMS×DTG 교차검증</span>}>
+            <table className="w-full text-left text-[11px]">
+              <thead>
+                <tr className="text-[10px] text-gray-500">
+                  <th className="pb-1.5 font-medium">노선</th>
+                  <th className="pb-1.5 font-medium">정시율</th>
+                  <th className="pb-1.5 font-medium">평균 안전점수</th>
+                  <th className="pb-1.5 font-medium">위험운전</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ROUTES.map((r, ri) => {
+                  const buses = snap.vehicles.filter((v) => v.routeId === r.id)
+                  const avg = buses.reduce((s, v) => s + v.score, 0) / buses.length
+                  const ev = snap.events.filter((e) => buses.some((b) => b.id === e.vehicleId)).length
+                  return (
+                    <tr key={r.id} className="border-t border-gray-800/50">
+                      <td className="py-1.5">
+                        <span className="flex items-center gap-1.5 text-gray-300">
+                          <span className="h-2 w-2 rounded-full" style={{ background: r.color }} />
+                          {r.name}
+                        </span>
+                      </td>
+                      <td className="py-1.5 tabular-nums text-gray-400">{[96.2, 93.8, 95.1][ri]}%</td>
+                      <td className="py-1.5 tabular-nums text-gray-400">{avg.toFixed(1)}점</td>
+                      <td className={`py-1.5 tabular-nums ${ev > 8 ? 'text-red-400' : 'text-gray-400'}`}>{ev}건</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {snap.trips.length > 4 && (
+              <div className="mt-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-[10px] leading-relaxed text-amber-300/80">
+                ⚠ 정산 검증 에이전트: 5563호 3회차 — BMS상 정상운행, DTG 위치이력상 인가노선{' '}
+                <b>87% 운행</b>. 검토 필요 (최종 판단: 담당자)
+              </div>
+            )}
+          </Panel>
+        )}
 
         {/* 실시간 이벤트 피드 */}
-        <Panel
-          title="위험운전 실시간 피드"
-          right={<span className="text-[11px] text-gray-500">공단 409 패킷 · 총 {kpi.totalEvents}건</span>}
-          className="min-h-0 flex-1"
-        >
-          <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
-            {snap.events.slice(0, 30).map((e, i) => (
-              <div
-                key={`${e.vehicleId}-${e.simTime}-${i}`}
-                className="flex items-center justify-between rounded-md bg-gray-800/50 px-2.5 py-1.5 text-[11px]"
-              >
-                <span className="font-semibold text-red-400">{e.eventType}</span>
-                <span className="text-gray-400">{e.vehicleId.slice(-4)}호</span>
-                <span className="tabular-nums text-gray-500">{e.speedKmh} km/h</span>
-                <span className="font-mono text-gray-600">{simClock(e.simTime)}</span>
-              </div>
-            ))}
-            {snap.events.length === 0 && (
-              <div className="py-4 text-center text-xs text-gray-600">이벤트 없음</div>
-            )}
-          </div>
-        </Panel>
+        {prefs.feed && (
+          <Panel
+            title="위험운전 실시간 피드"
+            right={<span className="text-[11px] text-gray-500">공단 409 패킷 · 총 {kpi.totalEvents}건</span>}
+            className="min-h-0 flex-1"
+          >
+            <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
+              {snap.events.slice(0, 30).map((e, i) => (
+                <div
+                  key={`${e.vehicleId}-${e.simTime}-${i}`}
+                  className="flex items-center justify-between rounded-md bg-gray-800/50 px-2.5 py-1.5 text-[11px]"
+                >
+                  <span className="font-semibold text-red-400">{e.eventType}</span>
+                  <span className="text-gray-400">{e.vehicleId.slice(-4)}호</span>
+                  <span className="tabular-nums text-gray-500">{e.speedKmh} km/h</span>
+                  <span className="font-mono text-gray-600">{simClock(e.simTime)}</span>
+                </div>
+              ))}
+              {snap.events.length === 0 && (
+                <div className="py-4 text-center text-xs text-gray-600">이벤트 없음</div>
+              )}
+            </div>
+          </Panel>
+        )}
       </div>
     </div>
   )
