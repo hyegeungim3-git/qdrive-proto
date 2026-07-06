@@ -140,7 +140,7 @@ export default function PassengerApp() {
       {/* 폰 프레임 */}
       <div className="relative w-[340px] shrink-0 rounded-[36px] border-4 border-gray-700 bg-black p-2 shadow-2xl">
         <div className="mx-auto mb-1 h-5 w-28 rounded-b-2xl bg-gray-800" />
-        <div className="relative h-[620px] overflow-hidden rounded-[26px] bg-gray-950">
+        <div className="flex h-[620px] flex-col overflow-hidden rounded-[26px] bg-gray-950">
           {/* 헤더 */}
           <div className="bg-gray-900 px-4 py-3">
             <div className="flex items-center justify-between">
@@ -159,6 +159,8 @@ export default function PassengerApp() {
             </div>
           </div>
 
+          {/* 본문 — 스크롤 영역 (하단 액션과 겹침 방지) */}
+          <div className="min-h-0 flex-1 overflow-y-auto pb-2">
           {/* 도착 정보 (탑승 중에는 숨김) */}
           {!riding && (
             <div className="space-y-2 px-3 pt-3">
@@ -387,8 +389,10 @@ export default function PassengerApp() {
             </div>
           )}
 
-          {/* 하단 액션 */}
-          <div className="absolute inset-x-3 bottom-3 space-y-2">
+          </div>
+
+          {/* 하단 액션 — 고정 푸터 (본문과 겹치지 않음) */}
+          <div className="shrink-0 space-y-2 px-3 pb-3 pt-1">
             <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2">
               <span className="text-[10px] text-emerald-300">🌱 오늘 대구 버스가 아낀 탄소</span>
               <span className="text-xs font-bold tabular-nums text-emerald-400">
