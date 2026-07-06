@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSim } from '../sim/store'
+import { engine, useSim } from '../sim/store'
 import { DEMO_VEHICLE_ID } from '../sim/engine'
 import { ROUTES } from '../sim/routes'
 import { indexPolyline } from '../sim/geo'
@@ -84,7 +84,47 @@ export default function DriverApp() {
   const snap = useSim()
   const v = snap.vehicles.find((x) => x.id === DEMO_VEHICLE_ID)!
   const route = ROUTES.find((r) => r.id === v.routeId)!
-  const warnActive = !!v.lastEvent && !!v.lastEventWall && Date.now() - v.lastEventWall < 6000
+  // 정당 판정 배너는 6초, 미판정(소명 가능) 배너는 15초 유지 — 소명 조작 시간 확보
+  const warnActive =
+    !!v.lastEvent && !!v.lastEventWall && Date.now() - v.lastEventWall < (v.lastEvent.justified ? 6000 : 15000)
+
+  /* 소명 (음성 우선, 미지원 시 버튼 폴백) */
+  const [pleaState, setPleaState] = useState<'idle' | 'listening' | 'sent'>('idle')
+  useEffect(() => setPleaState('idle'), [v.lastEventWall]) // 새 이벤트마다 초기화
+  const startPlea = () => {
+    const w = window as unknown as Record<string, any>
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
+    const submit = (note: string, method: '음성' | '버튼') => {
+      engine.submitPlea(v.id, note, method)
+      setPleaState('sent')
+    }
+    if (!SR) return submit('방어 운전 소명 (음성 미지원 환경 — 버튼 접수)', '버튼')
+    try {
+      const rec = new SR()
+      rec.lang = 'ko-KR'
+      rec.interimResults = false
+      setPleaState('listening')
+      let done = false
+      const finish = (note: string, method: '음성' | '버튼') => {
+        if (done) return
+        done = true
+        submit(note, method)
+      }
+      rec.onresult = (e: any) => finish(e.results[0][0].transcript, '음성')
+      rec.onerror = () => finish('방어 운전 소명 (음성 인식 실패 — 버튼 접수)', '버튼')
+      rec.onend = () => finish('방어 운전 소명 (음성 무입력 — 버튼 접수)', '버튼')
+      rec.start()
+      setTimeout(() => {
+        try {
+          rec.stop()
+        } catch {
+          /* noop */
+        }
+      }, 5000)
+    } catch {
+      submit('방어 운전 소명 (버튼 접수)', '버튼')
+    }
+  }
   const co2Saved = Math.max(0, (v.baselineFuelM3 - v.fuelM3) * 2.2)
   const w = snap.weather
   const restDue = snap.simTime > 5400
@@ -310,7 +350,14 @@ export default function DriverApp() {
 
               {/* 사내 랭킹 (게이미피케이션) */}
               <div className="rounded-xl bg-gray-900/60 px-4 py-3">
-                <div className="text-[11px] text-gray-500">🏆 오늘 사내 안전운전 순위</div>
+                <div className="flex items-center justify-between text-[11px] text-gray-500">
+                  <span>🏆 오늘 사내 안전운전 순위</span>
+                  {v.defenseCredits > 0 && (
+                    <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-bold text-emerald-400">
+                      🛡 방어 +{v.defenseCredits}
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1 flex items-end justify-between gap-2">
                   <span className="text-2xl font-extrabold tabular-nums text-gray-100">
                     {rank}
@@ -352,10 +399,29 @@ export default function DriverApp() {
           </div>
 
           {/* 위험운전 경고 — 상단 드롭 토스트 (테마 무관 고정 색상) */}
-          {warnActive && v.lastEvent && (
+          {warnActive && v.lastEvent && v.lastEvent.justified && (
+            /* 정당 판정: 감점 없음 인정 배너 */
             <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex justify-center">
               <div
                 className="warn-drop flex items-center gap-4 rounded-2xl px-7 py-3.5 shadow-2xl"
+                style={{ background: 'rgba(6, 78, 59, 0.96)', border: '1px solid rgba(52, 211, 153, 0.5)' }}
+              >
+                <span className="text-3xl">🛡️</span>
+                <div>
+                  <div className="text-2xl font-black leading-tight" style={{ color: '#a7f3d0' }}>
+                    회피 기동 인정 — 감점 없음
+                  </div>
+                  <div className="text-xs" style={{ color: 'rgba(167, 243, 208, 0.8)' }}>
+                    {v.lastEvent.eventType} · {v.lastEvent.justifyReason} · 방어운전 +1
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {warnActive && v.lastEvent && !v.lastEvent.justified && (
+            <div className="absolute inset-x-0 top-14 z-20 flex justify-center">
+              <div
+                className="warn-drop flex items-center gap-4 rounded-2xl px-6 py-3 shadow-2xl"
                 style={{ background: 'rgba(127, 29, 29, 0.96)', border: '1px solid rgba(248, 113, 113, 0.5)' }}
               >
                 <span className="text-3xl">⚠️</span>
@@ -367,6 +433,26 @@ export default function DriverApp() {
                     {v.lastEvent.speedKmh} km/h · 안전운전 부탁드립니다
                   </div>
                 </div>
+                {/* 소명 — 방어 운전이었다면 음성으로 즉시 기록 */}
+                {pleaState === 'idle' && (
+                  <button
+                    onClick={startPlea}
+                    className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-black"
+                    style={{ background: 'rgba(254, 202, 202, 0.95)', color: '#7f1d1d' }}
+                  >
+                    🎙 소명 남기기
+                  </button>
+                )}
+                {pleaState === 'listening' && (
+                  <span className="shrink-0 animate-pulse rounded-xl px-4 py-2.5 text-sm font-bold" style={{ background: 'rgba(254,202,202,0.25)', color: '#fecaca' }}>
+                    🎙 듣고 있어요 — 상황을 말씀하세요
+                  </span>
+                )}
+                {pleaState === 'sent' && (
+                  <span className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold" style={{ background: 'rgba(52,211,153,0.2)', color: '#a7f3d0' }}>
+                    ✓ 소명 접수 — 관제 검토 후 복원
+                  </span>
+                )}
               </div>
             </div>
           )}

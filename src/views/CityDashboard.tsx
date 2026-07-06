@@ -752,7 +752,10 @@ export default function CityDashboard() {
                   key={`${e.vehicleId}-${e.simTime}-${i}`}
                   className="flex items-center justify-between rounded-md bg-gray-800/50 px-2.5 py-1.5 text-[11px]"
                 >
-                  <span className="font-semibold text-red-400">{e.eventType}</span>
+                  <span className={`font-semibold ${e.justified ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {e.justified && <span title={e.justifyReason}>🛡 </span>}
+                    {e.eventType}
+                  </span>
                   <span className="text-gray-400">{e.vehicleId.slice(-4)}호</span>
                   <span className="tabular-nums text-gray-500">{e.speedKmh} km/h</span>
                   <span className="font-mono text-gray-600">{simClock(e.simTime)}</span>

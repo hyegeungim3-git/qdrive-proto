@@ -36,6 +36,21 @@ export interface Packet409 {
   speedKmh: number // 차량속도 (GPS 아님 — 내부 차량속도 기반)
   rpm: number
   simTime: number // 시뮬레이션 시각 (초)
+  /** 맥락 융합 판정: 방어적 조작으로 인정되어 감점 면제 */
+  justified?: boolean
+  justifyReason?: string
+}
+
+/** 기사 소명 — 급조작 직후 음성/버튼으로 즉시 기록 */
+export interface Plea {
+  id: number
+  vehicleId: string
+  driverName: string
+  eventType: RiskEventType
+  note: string
+  method: '음성' | '버튼'
+  simTime: number
+  status: '접수' | '인정'
 }
 
 /** 운행기록 요약 — 공단 521 패킷 상당 */
@@ -92,6 +107,8 @@ export interface VehicleState {
   nextStopDistM: number
   /** 하차벨 (승객 앱 → 기사 태블릿 연동) */
   bellPressed: boolean
+  /** 방어운전 크레딧 (정당 판정·소명 인정 누적) */
+  defenseCredits: number
   distanceKm: number
   fuelM3: number
   co2Kg: number
@@ -193,6 +210,7 @@ export interface SimSnapshot {
   workOrders: WorkOrder[]
   reservation: AlightReservation | null
   incidents: Incident[]
+  pleas: Plea[]
   /** 오늘 누적 탑승객 (정류장 승차 집계) */
   passengers: number
   /** 평균 재차율 시계열 (30초 샘플, 혼잡 추이 차트용) */

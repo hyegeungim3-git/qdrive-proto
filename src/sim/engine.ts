@@ -1,4 +1,4 @@
-import { indexPolyline, pointAt, type PolylineIndex } from './geo'
+import { haversine, indexPolyline, pointAt, type PolylineIndex } from './geo'
 import { ROUTES, type BusRoute } from './routes'
 import {
   RISK_EVENT_TYPES,
@@ -10,6 +10,7 @@ import {
   type DriverPersonaId,
   type Packet409,
   type Packet521,
+  type Plea,
   type RiskEventType,
   type SimSnapshot,
   type VehicleFault,
@@ -116,6 +117,8 @@ export class SimEngine {
     { id: 1, kind: '공사', title: '달구벌대로 상수도 공사 — 1개 차로 통제', lat: 35.8562, lng: 128.5655, status: '처리중', createdAt: 0 },
   ]
   private incidentSeq = 2
+  private pleas: Plea[] = []
+  private pleaSeq = 1
 
   simTime = 0
   running = true
@@ -333,6 +336,43 @@ export class SimEngine {
     this.emit()
   }
 
+  /** 기사 소명 — 급조작 직후 음성/버튼으로 즉시 기록 (마지막 이벤트에 귀속) */
+  submitPlea(vehicleId: string, note: string, method: '음성' | '버튼') {
+    const v = this.vehicles.find((x) => x.id === vehicleId)
+    if (!v || !v.lastEvent || v.lastEvent.justified) return
+    this.pleas.unshift({
+      id: this.pleaSeq++,
+      vehicleId,
+      driverName: v.driverName,
+      eventType: v.lastEvent.eventType,
+      note: note.trim() || '(내용 없음)',
+      method,
+      simTime: v.lastEvent.simTime,
+      status: '접수',
+    })
+    if (this.pleas.length > 20) this.pleas.pop()
+    this.emit()
+  }
+
+  /** 관제 검토: 소명 인정 → 감점 복원 + 방어 크레딧 (불이익 확정은 사람이, 구제는 즉시) */
+  acknowledgePlea(id: number) {
+    const p = this.pleas.find((x) => x.id === id)
+    if (!p || p.status === '인정') return
+    p.status = '인정'
+    const v = this.vehicles.find((x) => x.id === p.vehicleId)
+    if (v) {
+      v.score = Math.min(100, v.score + EVENT_SCORE[p.eventType])
+      v.eventCounts[p.eventType] = Math.max(0, v.eventCounts[p.eventType] - 1)
+      v.defenseCredits++
+    }
+    const ev = this.events.find((e) => e.vehicleId === p.vehicleId && e.simTime === p.simTime)
+    if (ev) {
+      ev.justified = true
+      ev.justifyReason = '기사 소명 인정'
+    }
+    this.emit()
+  }
+
   /** 승객 앱 하차벨 → 기사 태블릿에 즉시 표시 */
   pressBell(vehicleId: string) {
     const v = this.vehicles.find((x) => x.id === vehicleId)
@@ -491,7 +531,33 @@ export class SimEngine {
     v.score = Math.min(100, v.score + 0.015 * dt)
   }
 
+  /**
+   * 맥락 융합 정당성 판정 — 사고 회피 등 방어적 급조작은 감점하지 않는다.
+   * 판정 근거: ①돌발(사고·공사) 반경 ②폭우 감속 ③정류장 접근 감속 ④군집(동일 구간 타 차량 이벤트)
+   * 원칙: 면제는 자동으로 후하게, 감점 확정(불이익)은 사람 검토(소명함)로 보수적으로.
+   */
+  private justifyEvent(v: VehicleInternal, type: RiskEventType): string | null {
+    const decel = type === '급감속' || type === '급정지' || type === '급진로변경'
+    // ① 돌발 반경 300m — 사고·공사 지점 회피
+    for (const inc of this.incidents) {
+      if (inc.status !== '완료' && inc.lat != null && inc.lng != null) {
+        if (haversine([v.lat, v.lng], [inc.lat, inc.lng]) < 300) return `${inc.kind} 지점 회피 기동`
+      }
+    }
+    // ② 폭우 중 감속 계열 — 적절한 방어 대응
+    if (decel && this.weather.condition === '폭우') return '폭우 노면 감속 대응'
+    // ③ 정류장 접근 150m 내 감속 — 하차 대응
+    if (decel && v.nextStopDistM < 150) return '정류장 접근 대응'
+    // ④ 군집 — 최근 10분 내 같은 구간(250m)에서 타 차량도 급조작 (구간 환경 요인)
+    const near = this.events.filter(
+      (e) => e.vehicleId !== v.id && this.simTime - e.simTime < 600 && haversine([e.lat, e.lng], [v.lat, v.lng]) < 250,
+    ).length
+    if (near >= 2) return '위험구간 군집 반응 (환경 요인)'
+    return null
+  }
+
   private fireEvent(v: VehicleInternal, type: RiskEventType) {
+    const reason = this.justifyEvent(v, type)
     const ev: Packet409 = {
       packetType: 409,
       vehicleId: v.id,
@@ -501,11 +567,18 @@ export class SimEngine {
       speedKmh: Math.round(v.speedKmh),
       rpm: v.rpm,
       simTime: this.simTime,
+      justified: reason != null,
+      justifyReason: reason ?? undefined,
     }
     this.events.unshift(ev)
     if (this.events.length > 400) this.events.pop()
-    v.eventCounts[type]++
-    v.score = Math.max(40, v.score - EVENT_SCORE[type])
+    if (reason) {
+      // 정당 판정: 감점·위험운전 집계 면제 + 방어운전 크레딧
+      v.defenseCredits++
+    } else {
+      v.eventCounts[type]++
+      v.score = Math.max(40, v.score - EVENT_SCORE[type])
+    }
     v.lastEvent = ev
     v.lastEventWall = Date.now()
     // 급조작은 연료도 소모
@@ -601,6 +674,7 @@ export class SimEngine {
       nextStopName: '',
       nextStopDistM: 0,
       bellPressed: false,
+      defenseCredits: 0,
       targetSpeed: 0,
       nextStopM: 0,
       tripStartTime: 0,
@@ -656,6 +730,7 @@ export class SimEngine {
       workOrders: this.workOrders.map((w) => ({ ...w })),
       reservation: this.reservation ? { ...this.reservation } : null,
       incidents: this.incidents.map((i) => ({ ...i })),
+      pleas: this.pleas.map((p) => ({ ...p })),
       passengers: this.totalBoardings,
       occHistory: [...this.occHistory],
       kpi: {

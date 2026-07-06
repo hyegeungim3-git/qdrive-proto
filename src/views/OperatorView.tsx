@@ -180,6 +180,49 @@ export default function OperatorView() {
         </div>
       )}
 
+      {/* 기사 소명함 — 급조작 직후 음성/버튼 소명 검토 (불이익 확정은 사람이) */}
+      {snap.pleas.length > 0 && (
+        <Panel
+          title="🎙 기사 소명함"
+          right={
+            <span className="text-[11px] text-gray-500">
+              검토 대기 {snap.pleas.filter((p) => p.status === '접수').length}건 · 인정 시 감점 즉시 복원
+            </span>
+          }
+          className="border-emerald-500/20"
+        >
+          <div className="space-y-2">
+            {snap.pleas.slice(0, 5).map((p) => (
+              <div key={p.id} className="flex items-center gap-3 rounded-lg bg-gray-800/40 px-3 py-2.5">
+                <span className="text-lg">{p.method === '음성' ? '🎙' : '🔘'}</span>
+                <div className="min-w-0 flex-1 text-xs">
+                  <div className="font-semibold text-gray-200">
+                    {p.vehicleId.slice(-4)}호 {p.driverName} 기사 — <span className="text-red-400">{p.eventType}</span>{' '}
+                    <span className="text-[10px] text-gray-500">({simClock(p.simTime)} · {p.method} 소명)</span>
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] italic text-gray-400">"{p.note}"</div>
+                </div>
+                {p.status === '접수' ? (
+                  <button
+                    onClick={() => engine.acknowledgePlea(p.id)}
+                    className="shrink-0 rounded-md bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-500"
+                  >
+                    소명 인정
+                  </button>
+                ) : (
+                  <span className="shrink-0 rounded-md bg-emerald-500/20 px-2 py-1 text-[10px] font-bold text-emerald-400">
+                    ✓ 인정 · 감점 복원됨
+                  </span>
+                )}
+              </div>
+            ))}
+            <div className="text-[10px] text-gray-600">
+              전후 주행 데이터·DVR 클립(실증 시)이 자동 첨부됩니다 — AI는 면제를 자동으로, 불이익 확정은 사람이
+            </div>
+          </div>
+        </Panel>
+      )}
+
       {/* 차량/기사 테이블 */}
       <Panel title="차량 · 기사별 운행 현황" right={<span className="text-[11px] text-gray-500">OBD/CAN + DTG 통합</span>}>
         <table className="w-full text-left text-xs">
