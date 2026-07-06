@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { useSim } from '../sim/store'
 import { DEMO_VEHICLE_ID } from '../sim/engine'
 import { ROUTES } from '../sim/routes'
@@ -6,6 +7,25 @@ import { RISK_EVENT_TYPES } from '../sim/types'
 import { simClock } from '../components/ui'
 
 const ROUTE_TOTAL_M = new Map(ROUTES.map((r) => [r.id, indexPolyline(r.points).totalM]))
+
+const FRAME_W = 1020 // 12.3" 태블릿 프레임 고정폭
+const FRAME_H = 596 // 프레임 총 높이 (베젤 포함 근사)
+
+/** 컨테이너가 프레임보다 좁으면 잘리는 대신 비율 축소 */
+function useFrameScale() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => setScale(Math.min(1, el.clientWidth / FRAME_W))
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return { ref, scale }
+}
 
 /**
  * 운전석 인포테인먼트 — 12.3인치 차량 거치 태블릿 상시 표출용.
@@ -79,10 +99,16 @@ export default function DriverApp() {
   const fromStop = route.loop ? route.stops[0].name : (v.dir === 1 ? route.stops[0] : route.stops[route.stops.length - 1]).name
   const toStop = route.loop ? '' : (v.dir === 1 ? route.stops[route.stops.length - 1] : route.stops[0]).name
 
+  const { ref: scaleRef, scale } = useFrameScale()
+
   return (
     <div className="flex h-full flex-col items-center justify-start gap-4 overflow-y-auto py-1">
-      {/* 12.3" 태블릿 프레임 (가로형, 차량 거치) */}
-      <div className="relative w-[1020px] max-w-full shrink-0 rounded-[22px] border-[10px] border-gray-800 bg-black shadow-2xl">
+      {/* 12.3" 태블릿 프레임 (가로형, 차량 거치) — 좁은 화면에서는 비율 축소 */}
+      <div ref={scaleRef} className="w-full" style={{ height: Math.round(FRAME_H * scale) }}>
+      <div
+        className="relative mx-auto w-[1020px] shrink-0 rounded-[22px] border-[10px] border-gray-800 bg-black shadow-2xl"
+        style={scale < 1 ? { transform: `scale(${scale})`, transformOrigin: 'top center', marginLeft: 'calc((100% - 1020px) / 2)' } : undefined}
+      >
         <div className="absolute left-1/2 top-[3px] h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-gray-700" />
         <div className="relative h-[560px] overflow-hidden rounded-[12px] bg-gray-950">
           {/* 상단 상태바 */}
@@ -345,6 +371,7 @@ export default function DriverApp() {
             </div>
           )}
         </div>
+      </div>
       </div>
 
       {/* 설명 */}

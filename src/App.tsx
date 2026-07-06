@@ -58,7 +58,7 @@ export default function App() {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <DemoControls snap={snap} onNavigate={(t) => setTab(t as TabId)} />
           <button
             onClick={toggleTheme}

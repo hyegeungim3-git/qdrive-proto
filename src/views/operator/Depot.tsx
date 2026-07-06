@@ -57,7 +57,7 @@ export default function Depot() {
               </tr>
             </thead>
             <tbody>
-              {byFuel.slice(0, 6).map(({ v, level }, i) => (
+              {byFuel.map(({ v, level }, i) => (
                 <tr key={v.id} className="border-t border-gray-800/50">
                   <td className="py-1.5 font-mono text-gray-300">{v.id.slice(-4)}호</td>
                   <td className="py-1.5">
@@ -71,14 +71,16 @@ export default function Depot() {
                       <span className="tabular-nums text-gray-400">{level}%</span>
                     </div>
                   </td>
-                  <td className="py-1.5 font-mono text-gray-400">{['23:00', '23:40', '00:20', '01:00', '01:40', '02:20'][i]}</td>
-                  <td className="py-1.5 text-gray-400">{['1번', '2번', '4번', '1번', '2번', '4번'][i]}</td>
+                  <td className="py-1.5 font-mono text-gray-400">
+                    {['23:00', '23:40', '00:20', '01:00', '01:40', '02:20', '03:00', '03:40', '04:20'][i] ?? '—'}
+                  </td>
+                  <td className="py-1.5 text-gray-400">{['1번', '2번', '4번', '1번', '2번', '4번', '1번', '2번', '4번'][i] ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="mt-2 text-[10px] text-gray-600">
-            ※ 전기버스 전환 시 SOC·배터리 열화(SOH)·동절기 성능저하 반영 충전계획으로 확장 (2차)
+          <div className="mt-2 text-[10px] leading-relaxed text-gray-600">
+            ※ 전기버스 전환 시 SOC·배터리 열화(SOH)·동절기 성능저하를 반영한 충전계획으로 확장 예정 (2차 로드맵)
           </div>
         </Panel>
 

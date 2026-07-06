@@ -36,7 +36,7 @@ export default function DemoControls({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <span className="rounded-md border border-gray-800 bg-gray-900 px-2.5 py-1 font-mono text-sm text-emerald-400">
         {simClock(snap.simTime)}
       </span>
@@ -65,8 +65,8 @@ export default function DemoControls({
       </button>
 
       {/* 데모 트리거 — 발표 중 시나리오 구동용 */}
-      <div className="flex items-center gap-1.5 rounded-lg border border-dashed border-gray-700/70 py-1 pl-2 pr-1.5">
-        <span className="text-[9px] font-bold tracking-widest text-gray-600">시연</span>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-gray-700/70 py-1 pl-2 pr-1.5">
+        <span className="shrink-0 whitespace-nowrap text-[9px] font-bold tracking-widest text-gray-600">시연</span>
         <button
           onClick={() => {
             engine.triggerRiskEvent('급감속')

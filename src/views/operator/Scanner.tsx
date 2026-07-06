@@ -51,12 +51,12 @@ export default function Scanner() {
             {route.name} · {v.driverName} 기사 · 운행거리 {v.distanceKm.toFixed(2)}km
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-xs text-gray-500">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="whitespace-nowrap font-mono text-xs text-gray-500">
             ↻ 실시간 조회 {simClock(snap.simTime)} · 1초 단위
           </span>
           <span
-            className={`rounded-md border px-2.5 py-1 text-xs font-bold ${
+            className={`shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-bold ${
               aiScore >= 85
                 ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400'
                 : aiScore >= 75
