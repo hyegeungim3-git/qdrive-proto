@@ -3,7 +3,7 @@ import { Panel, simClock } from '../../components/ui'
 import { useSim } from '../../sim/store'
 import { ROUTES } from '../../sim/routes'
 import { indexPolyline, pointAt, haversine } from '../../sim/geo'
-import { RISK_EVENT_TYPES, type SimSnapshot } from '../../sim/types'
+import { RISK_EVENT_TYPES, type SimSnapshot, type VehicleState } from '../../sim/types'
 
 /**
  * AI 운영 리포트 — 광주 'AI+ 리포트' 벤치마킹.
@@ -147,14 +147,114 @@ function buildReport(snap: SimSnapshot): { paras: Para[]; asOf: string } {
   return { paras, asOf: simClock(snap.simTime) }
 }
 
+/** 운전원별 리포트 — 광주 '운전원별 운전습관 리포트' 벤치마킹 */
+function buildDriverReport(snap: SimSnapshot, v: VehicleState): { paras: Para[]; asOf: string } {
+  const sorted = [...snap.vehicles].sort((a, b) => b.score - a.score)
+  const rank = sorted.findIndex((x) => x.id === v.id) + 1
+  const grade = v.score >= 90 ? '양호' : v.score >= 75 ? '주의' : '위험'
+
+  const eff = v.fuelM3 > 0 ? v.distanceKm / v.fuelM3 : 0
+  const fleetEff = snap.kpi.totalFuelM3 > 0 ? snap.kpi.totalDistanceKm / snap.kpi.totalFuelM3 : 0
+  const effDelta = fleetEff > 0 ? ((eff - fleetEff) / fleetEff) * 100 : 0
+  const ecoRank = [...snap.vehicles]
+    .map((x) => (x.fuelM3 > 0 ? x.distanceKm / x.fuelM3 : 0))
+    .sort((a, b) => b - a)
+    .findIndex((e) => e <= eff) + 1
+
+  const myEvents = snap.events.filter((e) => e.vehicleId === v.id)
+  const justified = myEvents.filter((e) => e.justified).length
+  const effective = RISK_EVENT_TYPES.reduce((s, t) => s + v.eventCounts[t], 0)
+  const topType = RISK_EVENT_TYPES.map((t) => ({ t, c: v.eventCounts[t] })).sort((a, b) => b.c - a.c)[0]
+  const density = v.distanceKm > 0.5 ? effective / (v.distanceKm / 10) : 0
+  const fleetDensity =
+    snap.kpi.totalDistanceKm > 0.5
+      ? snap.vehicles.reduce((s, x) => s + RISK_EVENT_TYPES.reduce((a, t) => a + x.eventCounts[t], 0), 0) /
+        (snap.kpi.totalDistanceKm / 10)
+      : 0
+  const myPleas = snap.pleas.filter((p) => p.vehicleId === v.id)
+  const personalSave = v.baselineFuelM3 > 0 ? ((v.baselineFuelM3 - v.fuelM3) / v.baselineFuelM3) * 100 : 0
+  const myTrips = snap.trips.filter((t) => t.vehicleId === v.id).length
+  const route = ROUTES.find((r) => r.id === v.routeId)!
+
+  const COACH_TIP: Record<string, string> = {
+    급감속: '차간거리를 여유 있게 확보하고 정류장·교차로 접근 시 조기 감속하는 습관이 효과적입니다',
+    급정지: '전방 신호·정류장 예측을 앞당겨 제동 시점을 분산하는 것이 효과적입니다',
+    급가속: '출발 시 3초간 완만한 가속을 유지하면 연비와 점수가 함께 개선됩니다',
+    급출발: '출발 시 3초간 완만한 가속을 유지하면 연비와 점수가 함께 개선됩니다',
+    급진로변경: '차로 변경 전 방향지시등 3초 규칙과 사이드 확인 여유를 권장합니다',
+    급앞지르기: '앞지르기 전 충분한 가시거리 확보를 권장합니다',
+    급좌우회전: '곡선·회전 구간 진입 전 감속을 권장합니다',
+    급유턴: '유턴 시 대기 후 완만한 조향을 권장합니다',
+  }
+
+  const paras: Para[] = []
+
+  paras.push({
+    icon: '📊',
+    title: 'AI 종합 진단',
+    text:
+      `${v.driverName} 기사(${v.id.slice(-4)}호 · ${route.name})는 금일 ${v.distanceKm.toFixed(1)}km를 운행했으며(완료 회차 ${myTrips}회), ` +
+      `안전점수 ${Math.round(v.score)}점으로 사내 ${rank}위/${snap.vehicles.length}명, ${grade} 등급입니다. ` +
+      `경제운전은 연비 ${eff.toFixed(2)}km/m³(사내 ${ecoRank}위)로 사내 평균 대비 ${effDelta >= 0 ? '+' : ''}${effDelta.toFixed(1)}%이며, ` +
+      `코칭 반영 기준 개인 연료 절감률은 ${personalSave.toFixed(1)}%입니다.`,
+    evidence: [
+      `안전점수 ${Math.round(v.score)}점 (${rank}/${snap.vehicles.length})`,
+      `연비 ${eff.toFixed(2)} vs 사내 ${fleetEff.toFixed(2)}km/m³`,
+      `개인 절감률 ${personalSave.toFixed(1)}% (기준선 대비)`,
+    ],
+  })
+
+  paras.push({
+    icon: '🛡️',
+    title: '위험운행 행태',
+    text:
+      effective > 0
+        ? `감점 대상 위험운전은 ${effective}건으로 10km당 ${density.toFixed(1)}건(사내 평균 ${fleetDensity.toFixed(1)}건)입니다. ` +
+          `최다 유형은 ${topType.t}(${topType.c}건)이며, 별도로 ${justified}건은 맥락 판정(회피·정류장·기상)으로 감점에서 제외되었고 ` +
+          `소명 인정 ${myPleas.filter((p) => p.status === '인정').length}건을 포함해 방어운전 크레딧 ${v.defenseCredits}점을 보유합니다.`
+        : `감점 대상 위험운전이 없습니다. 정당 판정 ${justified}건·방어운전 크레딧 ${v.defenseCredits}점으로 모범적인 방어 운행입니다.`,
+    evidence: [
+      `유형별: ${RISK_EVENT_TYPES.filter((t) => v.eventCounts[t] > 0)
+        .map((t) => `${t} ${v.eventCounts[t]}`)
+        .join(' · ') || '없음'}`,
+      `밀도 ${density.toFixed(1)}건/10km (사내 ${fleetDensity.toFixed(1)})`,
+      `정당 ${justified}건 · 소명 ${myPleas.length}건 · 크레딧 ${v.defenseCredits}`,
+    ],
+  })
+
+  paras.push({
+    icon: '🎯',
+    title: '맞춤 개선 제안',
+    text:
+      effective > 0 && topType.c > 0
+        ? `${topType.t} 유형이 개선 우선순위입니다 — ${COACH_TIP[topType.t]}. ` +
+          (density > fleetDensity
+            ? `이벤트 밀도가 사내 평균을 상회하므로 4주 코칭 프로그램 대상 후보로 권장합니다.`
+            : `밀도는 사내 평균 이하로, 해당 유형만 집중 관리하면 상위권 진입이 가능합니다.`)
+        : `현재 운행 패턴 유지를 권장합니다. 동료 코칭의 모범 사례로 공유할 만한 수준입니다.`,
+    evidence: [
+      `우선 개선: ${effective > 0 ? `${topType.t} ${topType.c}건` : '해당 없음'}`,
+      `사내 평균 대비 밀도 ${density > fleetDensity ? '상회' : '이하'}`,
+    ],
+  })
+
+  return { paras, asOf: simClock(snap.simTime) }
+}
+
 export default function AiReport() {
   const snap = useSim()
   const [copied, setCopied] = useState(false)
-  const { paras, asOf } = buildReport(snap)
+  const [target, setTarget] = useState('전체')
+
+  const targetVehicle = target === '전체' ? null : snap.vehicles.find((x) => x.id === target)
+  const { paras, asOf } = targetVehicle ? buildDriverReport(snap, targetVehicle) : buildReport(snap)
+  const reportTitle = targetVehicle
+    ? `운전원 리포트 — ${targetVehicle.driverName} 기사 (${targetVehicle.id.slice(-4)}호)`
+    : '금일 운영 리포트'
 
   const copyText = () => {
     const text =
-      `[Qdrive AI 운영 리포트] ${asOf} 기준 (자동 생성)\n\n` +
+      `[Qdrive AI ${reportTitle}] ${asOf} 기준 (자동 생성)\n\n` +
       paras.map((p) => `■ ${p.title}\n${p.text}\n근거: ${p.evidence.join(' / ')}`).join('\n\n')
     navigator.clipboard?.writeText(text).then(() => {
       setCopied(true)
@@ -168,17 +268,31 @@ export default function AiReport() {
       <div className="flex items-center justify-between rounded-xl border border-gray-800 bg-gradient-to-r from-gray-900 to-gray-900/40 px-5 py-4">
         <div>
           <div className="text-[10px] font-semibold tracking-widest text-sky-400">AI OPERATIONS REPORT · AUTO-GENERATED</div>
-          <h2 className="mt-0.5 text-lg font-bold text-gray-100">금일 운영 리포트 — {asOf} 기준</h2>
+          <h2 className="mt-0.5 text-lg font-bold text-gray-100">{reportTitle} — {asOf} 기준</h2>
           <div className="mt-0.5 text-[11px] text-gray-500">
             모든 문장은 실시간 집계 데이터에서 자동 생성되며 문단마다 근거 수치를 병기합니다 · 열람 시점 기준 자동 갱신
           </div>
         </div>
-        <button
-          onClick={copyText}
-          className="shrink-0 rounded-md border border-gray-700 bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-gray-300 hover:text-gray-100"
-        >
-          {copied ? '✓ 복사됨' : '📋 텍스트 복사'}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <select
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-[11px] font-semibold text-gray-200"
+          >
+            <option value="전체">전체 운영 리포트</option>
+            {snap.vehicles.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.driverName} 기사 · {x.id.slice(-4)}호
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={copyText}
+            className="rounded-md border border-gray-700 bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-gray-300 hover:text-gray-100"
+          >
+            {copied ? '✓ 복사됨' : '📋 복사'}
+          </button>
+        </div>
       </div>
 
       {/* 자동 생성 문단 */}
