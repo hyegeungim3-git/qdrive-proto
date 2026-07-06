@@ -1,15 +1,37 @@
 import { useState } from 'react'
 import { Panel, simClock } from '../../components/ui'
 import { useSim } from '../../sim/store'
-import { RISK_EVENT_TYPES } from '../../sim/types'
+import { ROUTES } from '../../sim/routes'
+import { indexPolyline, pointAt, haversine } from '../../sim/geo'
+import { focusMap } from '../../sim/mapFocus'
+import { RISK_EVENT_TYPES, type RiskEventType } from '../../sim/types'
+
+/** 이벤트 좌표 → 최근접 정류장 이름 */
+const ALL_STOPS = ROUTES.flatMap((r) => {
+  const idx = indexPolyline(r.points)
+  return r.stops.map((s) => ({ name: s.name, pos: pointAt(idx, s.at * idx.totalM).pos }))
+})
+function nearestStop(lat: number, lng: number): string {
+  let best = ALL_STOPS[0]
+  let bd = Infinity
+  for (const s of ALL_STOPS) {
+    const d = haversine([lat, lng], s.pos)
+    if (d < bd) {
+      bd = d
+      best = s
+    }
+  }
+  return `${best.name} 인근`
+}
 
 /**
  * 운행 이력 — qdrive.co.kr의 "운행 이력 한눈에 보기 / 안전운전 리포트" 반영.
  * 회차별 운행 시작·종료 시간, 이동 거리, 연비, 탄소 절감량 조회 (공단 521 패킷 기반).
  */
-export default function TripsLog() {
+export default function TripsLog({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const snap = useSim()
   const [vehicleFilter, setVehicleFilter] = useState('전체')
+  const [typeFilter, setTypeFilter] = useState<RiskEventType | null>(null)
 
   const trips = snap.trips.filter((t) => vehicleFilter === '전체' || t.vehicleId === vehicleFilter)
   const totals = trips.reduce(
@@ -27,7 +49,10 @@ export default function TripsLog() {
         right={
           <select
             value={vehicleFilter}
-            onChange={(e) => setVehicleFilter(e.target.value)}
+            onChange={(e) => {
+              setVehicleFilter(e.target.value)
+              setTypeFilter(null)
+            }}
             className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-[11px] font-semibold text-gray-200"
           >
             <option value="전체">전체 차량</option>
@@ -103,16 +128,73 @@ export default function TripsLog() {
               <div className="text-[10px] text-gray-500">운전점수</div>
             </div>
             <div className="grid flex-1 grid-cols-4 gap-1">
-              {RISK_EVENT_TYPES.map((t) => (
-                <div key={t} className="rounded-md bg-gray-800/50 py-1.5 text-center">
-                  <div className="text-[9px] text-gray-500">{t}</div>
-                  <div className={`text-sm font-bold tabular-nums ${v.eventCounts[t] > 0 ? 'text-red-400' : 'text-gray-600'}`}>
-                    {v.eventCounts[t]}
-                  </div>
-                </div>
-              ))}
+              {RISK_EVENT_TYPES.map((t) => {
+                const occurred = snap.events.some((e) => e.vehicleId === v.id && e.eventType === t)
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setTypeFilter(typeFilter === t ? null : t)}
+                    disabled={!occurred}
+                    title={occurred ? '클릭하면 발생 위치·상황을 확인합니다' : '발생 없음'}
+                    className={`rounded-md py-1.5 text-center transition-colors ${
+                      typeFilter === t
+                        ? 'bg-sky-500/20 ring-1 ring-sky-500/50'
+                        : occurred
+                          ? 'bg-gray-800/50 hover:bg-gray-800'
+                          : 'cursor-default bg-gray-800/50'
+                    }`}
+                  >
+                    <div className="text-[9px] text-gray-500">{t}</div>
+                    <div className={`text-sm font-bold tabular-nums ${v.eventCounts[t] > 0 ? 'text-red-400' : 'text-gray-600'}`}>
+                      {v.eventCounts[t]}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
+
+          {/* 항목 클릭 → 발생 위치·상황 (지도 연동) */}
+          {typeFilter && (
+            <div className="mt-2 rounded-md border border-sky-500/20 bg-sky-500/5 px-3 py-2">
+              <div className="mb-1.5 flex items-center justify-between text-[10px]">
+                <span className="font-bold text-sky-300">
+                  📍 {typeFilter} 발생 내역 (정당 판정 포함) — 행을 클릭하면 지도로 이동
+                </span>
+                <button onClick={() => setTypeFilter(null)} className="text-gray-600 hover:text-gray-400">
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-1">
+                {snap.events
+                  .filter((e) => e.vehicleId === v.id && e.eventType === typeFilter)
+                  .slice(0, 8)
+                  .map((e, i) => (
+                    <button
+                      key={`${e.simTime}-${i}`}
+                      onClick={() => {
+                        focusMap(e.lat, e.lng, `${v.id.slice(-4)}호 ${e.eventType} · ${simClock(e.simTime)}`)
+                        onNavigate?.('city')
+                      }}
+                      className="flex w-full items-center gap-2 rounded-md bg-gray-800/50 px-2.5 py-1.5 text-left text-[10px] hover:bg-gray-800"
+                    >
+                      <span className="font-mono text-gray-400">{simClock(e.simTime)}</span>
+                      <span className="tabular-nums text-gray-500">{e.speedKmh}km/h · {e.rpm}rpm</span>
+                      <span className="truncate text-gray-300">{nearestStop(e.lat, e.lng)}</span>
+                      {e.justified ? (
+                        <span className="ml-auto shrink-0 rounded bg-emerald-500/15 px-1 font-bold text-emerald-400" title={e.justifyReason}>
+                          🛡 {e.justifyReason}
+                        </span>
+                      ) : (
+                        <span className="ml-auto shrink-0 rounded bg-red-500/15 px-1 font-bold text-red-400">감점</span>
+                      )}
+                      <span className="shrink-0 text-gray-600">🗺</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-2 rounded-md bg-gray-800/40 px-3 py-2 text-[11px] leading-relaxed text-gray-400">
             오늘 위험운전 총 <b className="text-gray-200">{riskTotal}건</b> · 주행{' '}
             <b className="text-gray-200">{v.distanceKm.toFixed(1)}km</b> · 탄소 절감{' '}

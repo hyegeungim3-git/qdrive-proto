@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Panel, simClock } from '../../components/ui'
 import { useSim } from '../../sim/store'
-import { topZones, type Para } from '../operator/AiReport'
+import { fmtN, PERIODS, topZones, type Para, type Period } from '../operator/AiReport'
 import { type SimSnapshot } from '../../sim/types'
 
 /**
@@ -15,8 +15,10 @@ const DAEGU_CNG_FLEET = 1513 // 대구 CNG 시내버스 (사업 분석 기준)
 const CNG_PRICE = 1055 // 원/N㎥ (광주 AI리포트 인용 단가)
 const OPERATING_DAYS = 330
 
-function buildPolicyReport(snap: SimSnapshot): { paras: Para[]; proposals: string[]; asOf: string } {
+function buildPolicyReport(snap: SimSnapshot, period: Period): { paras: Para[]; proposals: string[]; asOf: string } {
   const { kpi } = snap
+  const k = period.k
+  const prefix = k === 1 ? `${simClock(snap.simTime)} 기준` : `${period.label} 기준(금일 실측 비율 확장)`
   const running = snap.vehicles.length
   const opRate = (running / PLANNED) * 100
   const occNow = snap.occHistory.length ? snap.occHistory[snap.occHistory.length - 1].pct : 0
@@ -41,12 +43,12 @@ function buildPolicyReport(snap: SimSnapshot): { paras: Para[]; proposals: strin
       icon: '🚌',
       title: '운행·수요 총괄',
       text:
-        `${simClock(snap.simTime)} 기준 계획 ${PLANNED}대 중 ${running}대 운행(운행률 ${opRate.toFixed(0)}%, 결행 0건)으로 ` +
-        `총 ${kpi.totalDistanceKm.toFixed(1)}km를 운행했습니다. 탑승객은 ${snap.passengers.toLocaleString()}명, ` +
+        `${prefix} 계획 ${PLANNED}대 중 ${running}대 운행(운행률 ${opRate.toFixed(0)}%, 결행 0건)으로 ` +
+        `총 ${fmtN(kpi.totalDistanceKm * k)}km를 운행했습니다. 탑승객은 ${fmtN(snap.passengers * k)}명, ` +
         `평균 재차율은 현재 ${occNow}%(금일 최고 ${occMax}%)로 ${occMax >= 70 ? '첨두 혼잡 구간이 관찰되어 증차 검토가 필요합니다' : '공급이 수요를 안정적으로 수용하고 있습니다'}.`,
       evidence: [
         `운행률 ${running}/${PLANNED}대`,
-        `탑승 ${snap.passengers}명 (APC 상당)`,
+        `탑승 ${fmtN(snap.passengers * k)}명 (APC 상당)`,
         `재차율 현재 ${occNow}% · 최고 ${occMax}%`,
       ],
     },
@@ -54,9 +56,9 @@ function buildPolicyReport(snap: SimSnapshot): { paras: Para[]; proposals: strin
       icon: '🛡️',
       title: '안전 정책 진단',
       text:
-        `위험운전 ${snap.events.length}건 중 ${justified}건(${snap.events.length > 0 ? Math.round((justified / snap.events.length) * 100) : 0}%)은 방어적 조작으로 판정되어 기사 감점에서 제외되었습니다. ` +
+        `위험운전 ${fmtN(snap.events.length * k)}건 중 ${fmtN(justified * k)}건(${snap.events.length > 0 ? Math.round((justified / snap.events.length) * 100) : 0}%)은 방어적 조작으로 판정되어 기사 감점에서 제외되었습니다. ` +
         (zones[0]
-          ? `감점 대상 이벤트는 ${zones.map((z) => `${z.name}(${z.count}건)`).join(' · ')} 구간에 집중되어, 개인 습관보다 도로 환경 요인 가능성이 높습니다. 해당 구간의 시야·신호·정류장 위치 점검을 권고합니다.`
+          ? `감점 대상 이벤트는 ${zones.map((z) => `${z.name}(${fmtN(z.count * k)}건)`).join(' · ')} 구간에 집중되어, 개인 습관보다 도로 환경 요인 가능성이 높습니다. 해당 구간의 시야·신호·정류장 위치 점검을 권고합니다.`
           : '특정 구간 집중은 관찰되지 않았습니다.') +
         (activeIncidents.length > 0 ? ` 현재 진행 중 돌발상황 ${activeIncidents.length}건은 관제·시민안내가 자동 연동되어 대응 중입니다.` : ''),
       evidence: [
@@ -69,7 +71,7 @@ function buildPolicyReport(snap: SimSnapshot): { paras: Para[]; proposals: strin
       icon: '💰',
       title: '재정·준공영제',
       text:
-        `코칭 효과로 연료 ${kpi.fuelSavedPct.toFixed(1)}%(${savedM3.toFixed(1)}m³)를 절감 중입니다. ` +
+        `코칭 효과로 연료 ${kpi.fuelSavedPct.toFixed(1)}%(${fmtN(savedM3 * k)}m³)를 절감 중입니다. ` +
         `대구 CNG 전 차량(${DAEGU_CNG_FLEET.toLocaleString()}대) 기준 단순 환산 시 연간 약 ${annualEok.toFixed(1)}억원의 재정지원금 절감 여력에 해당합니다. ` +
         `CO₂ 절감 ${kpi.totalCo2SavedKg.toFixed(1)}kg은 시 탄소중립 목표 실적으로 집계 가능합니다.` +
         (snap.trips.length > 4 ? ' 정산 검증에서 인가노선 이탈 의심 1건이 플래그되어 담당자 검토 대기 중입니다 (BMS×DTG 교차검증).' : ''),
@@ -109,7 +111,9 @@ function buildPolicyReport(snap: SimSnapshot): { paras: Para[]; proposals: strin
 export default function PolicyReport({ onClose }: { onClose: () => void }) {
   const snap = useSim()
   const [copied, setCopied] = useState(false)
-  const { paras, proposals, asOf } = buildPolicyReport(snap)
+  const [periodId, setPeriodId] = useState<Period['id']>('today')
+  const period = PERIODS.find((p) => p.id === periodId)!
+  const { paras, proposals, asOf } = buildPolicyReport(snap, period)
 
   const copyText = () => {
     const text =
@@ -133,6 +137,17 @@ export default function PolicyReport({ onClose }: { onClose: () => void }) {
             <div className="mt-0.5 text-[11px] text-gray-500">전 차량·전 이해관계자 데이터 총괄 · 열람 시점 기준 자동 갱신</div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <select
+              value={periodId}
+              onChange={(e) => setPeriodId(e.target.value as Period['id'])}
+              className="rounded-md border border-gray-700 bg-gray-800 px-2 py-1.5 text-[11px] font-semibold text-gray-200"
+            >
+              {PERIODS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
             <button onClick={copyText} className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-[11px] font-semibold text-gray-300 hover:text-gray-100">
               {copied ? '✓ 복사됨' : '📋 복사'}
             </button>
@@ -168,6 +183,12 @@ export default function PolicyReport({ onClose }: { onClose: () => void }) {
           ⚠ 신뢰성 원칙: 수치는 전부 실시간 집계에서 산출(연간 환산은 단순 선형 가정 명시). 문장 생성부는
           데모 규칙 기반 → 실증 시 LLM + 수치 검증 파이프라인. 정책 결정의 참고자료이며 단독 근거로
           사용할 수 없습니다.
+          {period.k > 1 && (
+            <>
+              <br />⚠ 기간 확장(×{period.k}일): 금일 실측 비율 기반 모의 추정 — 실증 축적 시 실측 집계로
+              대체. 재정 연간 환산은 일 실측 기준으로 별도 산출.
+            </>
+          )}
         </div>
       </div>
     </div>

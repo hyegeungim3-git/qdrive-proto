@@ -49,8 +49,21 @@ export interface Para {
   evidence: string[]
 }
 
-function buildReport(snap: SimSnapshot): { paras: Para[]; asOf: string } {
+/** 리포트 기간 — 데모는 금일 실측 비율을 운행일수로 확장(모의), 실증 시 실측 집계로 대체 */
+export const PERIODS = [
+  { id: 'today', label: '오늘 (실시간)', k: 1 },
+  { id: 'week', label: '최근 1주', k: 7 },
+  { id: 'month', label: '최근 1개월', k: 26 },
+  { id: 'year', label: '최근 1년', k: 312 },
+] as const
+export type Period = (typeof PERIODS)[number]
+
+export const fmtN = (x: number) => Math.round(x).toLocaleString()
+
+function buildReport(snap: SimSnapshot, period: Period): { paras: Para[]; asOf: string } {
   const { kpi } = snap
+  const k = period.k
+  const prefix = k === 1 ? `금일 ${simClock(snap.simTime)} 기준` : `${period.label} 기준(금일 실측 비율 확장)`
   const effective = snap.events.filter((e) => !e.justified)
   const justified = snap.events.length - effective.length
   const eff = kpi.totalFuelM3 > 0 ? kpi.totalDistanceKm / kpi.totalFuelM3 : 0
@@ -72,13 +85,13 @@ function buildReport(snap: SimSnapshot): { paras: Para[]; asOf: string } {
     icon: '🚌',
     title: '운행 총평',
     text:
-      `금일 ${simClock(snap.simTime)} 기준 ${snap.vehicles.length}대가 총 ${kpi.totalDistanceKm.toFixed(1)}km를 운행했습니다. ` +
+      `${prefix} ${snap.vehicles.length}대가 총 ${fmtN(kpi.totalDistanceKm * k)}km를 운행했습니다. ` +
       `평균 연비는 ${eff.toFixed(2)}km/m³로 미코칭 기준선 대비 ${kpi.fuelSavedPct.toFixed(1)}% 절감 중이며, ` +
-      `누적 CO₂ 절감량은 ${kpi.totalCo2SavedKg.toFixed(1)}kg입니다. 탑승객은 ${snap.passengers.toLocaleString()}명으로 집계되었습니다.`,
+      `CO₂ 절감량은 ${fmtN(kpi.totalCo2SavedKg * k)}kg입니다. 탑승객은 ${fmtN(snap.passengers * k)}명으로 집계되었습니다.`,
     evidence: [
-      `주행거리 ∑ ${kpi.totalDistanceKm.toFixed(1)}km (DTG 521)`,
-      `연료 ∑ ${kpi.totalFuelM3.toFixed(1)}m³ (CAN)`,
-      `승차 집계 ${snap.passengers}명 (APC 상당)`,
+      `주행거리 ∑ ${fmtN(kpi.totalDistanceKm * k)}km (DTG 521)`,
+      `연료 ∑ ${fmtN(kpi.totalFuelM3 * k)}m³ (CAN)`,
+      `승차 집계 ${fmtN(snap.passengers * k)}명 (APC 상당)`,
     ],
   })
 
@@ -86,15 +99,15 @@ function buildReport(snap: SimSnapshot): { paras: Para[]; asOf: string } {
     icon: '🛡️',
     title: '안전 운행',
     text:
-      `위험운전은 총 ${snap.events.length}건 감지되었고, 이 중 ${justified}건은 맥락 판정(사고 회피·정류장 접근·폭우 대응 등)으로 감점에서 제외되었습니다. ` +
+      `위험운전은 총 ${fmtN(snap.events.length * k)}건 감지되었고, 이 중 ${fmtN(justified * k)}건은 맥락 판정(사고 회피·정류장 접근·폭우 대응 등)으로 감점에서 제외되었습니다. ` +
       (topType && topType.c > 0
-        ? `감점 대상 ${effective.length}건 중 최다 유형은 ${topType.t}(${topType.c}건)이며, ` +
-          (zones[0] ? `${zones[0].name} 인근(${zones[0].count}건)에 집중되어 해당 구간 서행 안내를 권장합니다.` : '특정 구간 집중은 관찰되지 않았습니다.')
+        ? `감점 대상 ${fmtN(effective.length * k)}건 중 최다 유형은 ${topType.t}(${fmtN(topType.c * k)}건)이며, ` +
+          (zones[0] ? `${zones[0].name} 인근(${fmtN(zones[0].count * k)}건)에 집중되어 해당 구간 서행 안내를 권장합니다.` : '특정 구간 집중은 관찰되지 않았습니다.')
         : '감점 대상 이벤트가 없어 전반적으로 안정적인 운행입니다.'),
     evidence: [
-      `409 패킷 ${snap.events.length}건`,
-      `정당 판정 ${justified}건 (감점 제외)`,
-      ...(zones[0] ? [`다발 구간: ${zones.map((z) => `${z.name} ${z.count}건`).join(' · ')}`] : []),
+      `409 패킷 ${fmtN(snap.events.length * k)}건`,
+      `정당 판정 ${fmtN(justified * k)}건 (감점 제외)`,
+      ...(zones[0] ? [`다발 구간: ${zones.map((z) => `${z.name} ${fmtN(z.count * k)}건`).join(' · ')}`] : []),
     ],
   })
 
@@ -148,7 +161,9 @@ function buildReport(snap: SimSnapshot): { paras: Para[]; asOf: string } {
 }
 
 /** 운전원별 리포트 — 광주 '운전원별 운전습관 리포트' 벤치마킹 */
-function buildDriverReport(snap: SimSnapshot, v: VehicleState): { paras: Para[]; asOf: string } {
+function buildDriverReport(snap: SimSnapshot, v: VehicleState, period: Period): { paras: Para[]; asOf: string } {
+  const k = period.k
+  const dayLabel = k === 1 ? '금일' : `${period.label}(확장)`
   const sorted = [...snap.vehicles].sort((a, b) => b.score - a.score)
   const rank = sorted.findIndex((x) => x.id === v.id) + 1
   const grade = v.score >= 90 ? '양호' : v.score >= 75 ? '주의' : '위험'
@@ -193,7 +208,7 @@ function buildDriverReport(snap: SimSnapshot, v: VehicleState): { paras: Para[];
     icon: '📊',
     title: 'AI 종합 진단',
     text:
-      `${v.driverName} 기사(${v.id.slice(-4)}호 · ${route.name})는 금일 ${v.distanceKm.toFixed(1)}km를 운행했으며(완료 회차 ${myTrips}회), ` +
+      `${v.driverName} 기사(${v.id.slice(-4)}호 · ${route.name})는 ${dayLabel} ${fmtN(v.distanceKm * k)}km를 운행했으며(완료 회차 ${fmtN(myTrips * k)}회), ` +
       `안전점수 ${Math.round(v.score)}점으로 사내 ${rank}위/${snap.vehicles.length}명, ${grade} 등급입니다. ` +
       `경제운전은 연비 ${eff.toFixed(2)}km/m³(사내 ${ecoRank}위)로 사내 평균 대비 ${effDelta >= 0 ? '+' : ''}${effDelta.toFixed(1)}%이며, ` +
       `코칭 반영 기준 개인 연료 절감률은 ${personalSave.toFixed(1)}%입니다.`,
@@ -209,16 +224,16 @@ function buildDriverReport(snap: SimSnapshot, v: VehicleState): { paras: Para[];
     title: '위험운행 행태',
     text:
       effective > 0
-        ? `감점 대상 위험운전은 ${effective}건으로 10km당 ${density.toFixed(1)}건(사내 평균 ${fleetDensity.toFixed(1)}건)입니다. ` +
-          `최다 유형은 ${topType.t}(${topType.c}건)이며, 별도로 ${justified}건은 맥락 판정(회피·정류장·기상)으로 감점에서 제외되었고 ` +
-          `소명 인정 ${myPleas.filter((p) => p.status === '인정').length}건을 포함해 방어운전 크레딧 ${v.defenseCredits}점을 보유합니다.`
-        : `감점 대상 위험운전이 없습니다. 정당 판정 ${justified}건·방어운전 크레딧 ${v.defenseCredits}점으로 모범적인 방어 운행입니다.`,
+        ? `감점 대상 위험운전은 ${fmtN(effective * k)}건으로 10km당 ${density.toFixed(1)}건(사내 평균 ${fleetDensity.toFixed(1)}건)입니다. ` +
+          `최다 유형은 ${topType.t}(${fmtN(topType.c * k)}건)이며, 별도로 ${fmtN(justified * k)}건은 맥락 판정(회피·정류장·기상)으로 감점에서 제외되었고 ` +
+          `소명 인정 ${fmtN(myPleas.filter((p) => p.status === '인정').length * k)}건을 포함해 방어운전 크레딧 ${fmtN(v.defenseCredits * k)}점을 보유합니다.`
+        : `감점 대상 위험운전이 없습니다. 정당 판정 ${fmtN(justified * k)}건·방어운전 크레딧 ${fmtN(v.defenseCredits * k)}점으로 모범적인 방어 운행입니다.`,
     evidence: [
       `유형별: ${RISK_EVENT_TYPES.filter((t) => v.eventCounts[t] > 0)
-        .map((t) => `${t} ${v.eventCounts[t]}`)
+        .map((t) => `${t} ${fmtN(v.eventCounts[t] * k)}`)
         .join(' · ') || '없음'}`,
       `밀도 ${density.toFixed(1)}건/10km (사내 ${fleetDensity.toFixed(1)})`,
-      `정당 ${justified}건 · 소명 ${myPleas.length}건 · 크레딧 ${v.defenseCredits}`,
+      `정당 ${fmtN(justified * k)}건 · 소명 ${fmtN(myPleas.length * k)}건 · 크레딧 ${fmtN(v.defenseCredits * k)}`,
     ],
   })
 
@@ -245,9 +260,11 @@ export default function AiReport() {
   const snap = useSim()
   const [copied, setCopied] = useState(false)
   const [target, setTarget] = useState('전체')
+  const [periodId, setPeriodId] = useState<Period['id']>('today')
+  const period = PERIODS.find((p) => p.id === periodId)!
 
   const targetVehicle = target === '전체' ? null : snap.vehicles.find((x) => x.id === target)
-  const { paras, asOf } = targetVehicle ? buildDriverReport(snap, targetVehicle) : buildReport(snap)
+  const { paras, asOf } = targetVehicle ? buildDriverReport(snap, targetVehicle, period) : buildReport(snap, period)
   const reportTitle = targetVehicle
     ? `운전원 리포트 — ${targetVehicle.driverName} 기사 (${targetVehicle.id.slice(-4)}호)`
     : '금일 운영 리포트'
@@ -274,6 +291,17 @@ export default function AiReport() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <select
+            value={periodId}
+            onChange={(e) => setPeriodId(e.target.value as Period['id'])}
+            className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1.5 text-[11px] font-semibold text-gray-200"
+          >
+            {PERIODS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
           <select
             value={target}
             onChange={(e) => setTarget(e.target.value)}
@@ -313,6 +341,12 @@ export default function AiReport() {
         ⚠ 신뢰성 원칙: 본 리포트의 수치는 전부 DTG/CAN/APC 집계에서 산출되며, 문장 생성부는 데모에서는
         규칙 기반(결정적), 실증 단계에서는 LLM + 수치 검증 파이프라인으로 교체됩니다. AI가 생성한
         제안은 참고용이며 인사·평가 등 불이익 결정에 단독 사용할 수 없습니다.
+        {period.k > 1 && (
+          <>
+            <br />⚠ 기간 확장(×{period.k}일): 금일 실측 비율 기반 모의 추정 — 실증 축적 시 해당 기간
+            실측 집계로 대체됩니다.
+          </>
+        )}
       </div>
     </div>
   )

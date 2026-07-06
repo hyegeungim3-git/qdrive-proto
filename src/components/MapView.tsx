@@ -24,14 +24,27 @@ function incidentIcon(inc: Incident): L.DivIcon {
   })
 }
 
-/** 패널에서 인시던트 클릭 시 지도 이동 */
-function FlyTo({ target }: { target: { lat: number; lng: number; nonce: number } | null }) {
+/** 패널에서 위치 클릭 시 지도 이동 + 포커스 링 표시 */
+function FlyTo({ target }: { target: { lat: number; lng: number; label?: string; nonce: number } | null }) {
   const map = useMap()
   useEffect(() => {
     if (!target) return
     map.flyTo([target.lat, target.lng], 15, { duration: 0.8 })
   }, [target, map])
-  return null
+  if (!target) return null
+  return (
+    <CircleMarker
+      center={[target.lat, target.lng]}
+      radius={16}
+      pathOptions={{ color: '#8b5cf6', weight: 2.5, dashArray: '6 4', fillColor: '#8b5cf6', fillOpacity: 0.12 }}
+    >
+      {target.label && (
+        <Tooltip direction="top" offset={[0, -14]} permanent>
+          <span style={{ fontSize: 11, fontWeight: 700 }}>{target.label}</span>
+        </Tooltip>
+      )}
+    </CircleMarker>
+  )
 }
 
 const ROUTE_IDX = new Map(ROUTES.map((r) => [r.id, indexPolyline(r.points)]))
@@ -112,7 +125,7 @@ export default function MapView({
   highlightRouteId?: string | null
   realBuses?: RealBus[]
   incidents?: Incident[]
-  focusTarget?: { lat: number; lng: number; nonce: number } | null
+  focusTarget?: { lat: number; lng: number; label?: string; nonce: number } | null
 }) {
   const cells = useMemo(() => (showHeat ? heatCells(events) : []), [events, showHeat])
   const theme = useTheme()

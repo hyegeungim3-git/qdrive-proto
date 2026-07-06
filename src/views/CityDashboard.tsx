@@ -14,6 +14,7 @@ import { KpiCard, Panel, simClock } from '../components/ui'
 import { engine, useSim } from '../sim/store'
 import { DEFAULT_ROUTES, getBisKey, setBisKey, startBis, stopBis, useBis } from '../sim/bis'
 import { ROUTES } from '../sim/routes'
+import { focusMap, useMapFocus } from '../sim/mapFocus'
 import PolicyReport from './city/PolicyReport'
 
 /* ── 위젯 커스터마이즈 (표시 여부 localStorage 유지) ── */
@@ -86,7 +87,7 @@ export default function CityDashboard() {
   const [showPrefs, setShowPrefs] = useState(false)
   const [routeFilter, setRouteFilter] = useState<Set<string>>(new Set(DEFAULT_ROUTES))
   const [showPrevDay, setShowPrevDay] = useState(true)
-  const [focusTarget, setFocusTarget] = useState<{ lat: number; lng: number; nonce: number } | null>(null)
+  const focusTarget = useMapFocus() // 탭 간 공유 (운행 이력 등에서 설정 가능)
   const [showPolicyReport, setShowPolicyReport] = useState(false)
 
   const togglePref = (id: WidgetId) =>
@@ -237,7 +238,7 @@ export default function CityDashboard() {
                 .map((i) => (
                   <button
                     key={i.id}
-                    onClick={() => i.lat != null && setFocusTarget({ lat: i.lat, lng: i.lng!, nonce: Date.now() })}
+                    onClick={() => i.lat != null && focusMap(i.lat, i.lng!, `${i.kind} 지점`)}
                     disabled={i.lat == null}
                     className={`flex w-full items-center gap-1.5 rounded-md bg-gray-800/40 px-2 py-1 text-left text-[10px] ${
                       i.lat != null ? 'hover:bg-gray-800' : 'cursor-default'

@@ -21,7 +21,7 @@ const SUB_TABS = [
 
 type SubTab = (typeof SUB_TABS)[number]['id']
 
-export default function OperatorView() {
+export default function OperatorView({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const [sub, setSub] = useState<SubTab>('ops')
   const snap = useSim()
   const fault = snap.fault
@@ -53,7 +53,7 @@ export default function OperatorView() {
       <div className="flex h-full flex-col gap-3">
         {subNav}
         <div className="min-h-0 flex-1">
-          {sub === 'trips' && <TripsLog />}
+          {sub === 'trips' && <TripsLog onNavigate={onNavigate} />}
           {sub === 'report' && <AiReport />}
           {sub === 'scanner' && <Scanner />}
           {sub === 'chat' && <MaintChat />}
