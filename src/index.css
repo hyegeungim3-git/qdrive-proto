@@ -190,6 +190,26 @@ html.light .bus-marker .bus-svg {
   border-color: rgba(56, 189, 248, 0.4);
 }
 
+/* 돌발정보 마커 */
+.incident-marker {
+  font-size: 20px;
+  line-height: 1;
+  transform: translate(-10px, -12px);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+}
+.incident-marker.fresh {
+  animation: incident-pulse 1s ease-in-out infinite;
+}
+@keyframes incident-pulse {
+  0%,
+  100% {
+    transform: translate(-10px, -12px) scale(1);
+  }
+  50% {
+    transform: translate(-10px, -12px) scale(1.25);
+  }
+}
+
 /* 토스트 등장 애니메이션 */
 .toast-in {
   animation: toast-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);

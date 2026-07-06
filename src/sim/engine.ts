@@ -5,6 +5,7 @@ import {
   type AlightReservation,
   type Complaint,
   type DispatchRecommendation,
+  type Incident,
   type DriverPersona,
   type DriverPersonaId,
   type Packet409,
@@ -110,6 +111,11 @@ export class SimEngine {
   private totalBoardings = 0
   private occHistory: { t: number; pct: number }[] = []
   private occSampleTimer = 0
+  private incidents: Incident[] = [
+    // 상시 진행 중인 도로 공사 1건 (달구벌대로 두류 인근)
+    { id: 1, kind: '공사', title: '달구벌대로 상수도 공사 — 1개 차로 통제', lat: 35.8562, lng: 128.5655, status: '처리중', createdAt: 0 },
+  ]
+  private incidentSeq = 2
 
   simTime = 0
   running = true
@@ -164,7 +170,7 @@ export class SimEngine {
     this.emit()
   }
 
-  /** 데모 트리거: 날씨 전환 (맑음 → 폭우 → 폭염 → 맑음) */
+  /** 데모 트리거: 날씨 전환 (맑음 → 폭우 → 폭염 → 맑음) — 기상특보 인시던트 연동 */
   cycleWeather() {
     const next: Record<WeatherCondition, WeatherState> = {
       맑음: { condition: '폭우', tempC: 21, rainMm: 14, delayForecastMin: 6, demandDeltaPct: -8 },
@@ -172,6 +178,34 @@ export class SimEngine {
       폭염: { condition: '맑음', tempC: 24, rainMm: 0, delayForecastMin: 0, demandDeltaPct: 0 },
     }
     this.weather = next[this.weather.condition]
+    const active = this.incidents.find((i) => i.kind === '기타' && i.status !== '완료')
+    if (this.weather.condition !== '맑음' && !active) {
+      this.incidents.unshift({
+        id: this.incidentSeq++,
+        kind: '기타',
+        title: `${this.weather.condition === '폭우' ? '호우' : '폭염'} 특보 — 전 노선 ${this.weather.condition === '폭우' ? '감속 운행' : '냉방 강화'}`,
+        status: '발생',
+        createdAt: this.simTime,
+      })
+    } else if (this.weather.condition === '맑음' && active) {
+      active.status = '완료'
+    }
+    this.emit()
+  }
+
+  /** 데모 트리거: 접촉사고 발생 (주인공 차량 현재 위치) — 발생→처리중→완료 자동 전이 */
+  triggerAccident() {
+    const v = this.vehicles.find((x) => x.id === DEMO_VEHICLE_ID)!
+    this.incidents.unshift({
+      id: this.incidentSeq++,
+      kind: '사고',
+      title: `급행1 ${v.nextStopName} 인근 접촉사고 — 승객 부상 없음`,
+      lat: v.lat,
+      lng: v.lng,
+      status: '발생',
+      createdAt: this.simTime,
+    })
+    if (this.incidents.length > 12) this.incidents.pop()
     this.emit()
   }
 
@@ -290,7 +324,12 @@ export class SimEngine {
 
   approveWorkOrder(id: number) {
     const w = this.workOrders.find((x) => x.id === id)
-    if (w) w.status = '발행됨'
+    if (w) {
+      w.status = '발행됨'
+      // 고장 인시던트 → 처리중 전환
+      const inc = this.incidents.find((i) => i.kind === '고장' && i.status === '발생')
+      if (inc) inc.status = '처리중'
+    }
     this.emit()
   }
 
@@ -331,6 +370,13 @@ export class SimEngine {
       const avg = this.vehicles.reduce((s, v) => s + v.occupancy, 0) / this.vehicles.length
       this.occHistory.push({ t: this.simTime, pct: Math.round(avg * 100) })
       if (this.occHistory.length > 48) this.occHistory.shift()
+    }
+    // 사고 인시던트 자동 전이 (발생 90초 후 처리중, 6분 후 완료)
+    for (const inc of this.incidents) {
+      if (inc.kind !== '사고' || inc.status === '완료') continue
+      const age = this.simTime - inc.createdAt
+      if (inc.status === '발생' && age > 90) inc.status = '처리중'
+      else if (inc.status === '처리중' && age > 360) inc.status = '완료'
     }
   }
 
@@ -499,6 +545,14 @@ export class SimEngine {
     }
     if (!f.predicted && f.coolantTemp >= 100) {
       f.predicted = true
+      // 돌발정보: 고장 인시던트 발생
+      this.incidents.unshift({
+        id: this.incidentSeq++,
+        kind: '고장',
+        title: `${f.vehicleId.slice(-4)}호 ${f.kind} — 예방정비 예정`,
+        status: '발생',
+        createdAt: this.simTime,
+      })
       // Agentic: 예지정비 에이전트가 작업지시 초안 자동 생성
       this.workOrders.unshift({
         id: this.woSeq++,
@@ -598,6 +652,7 @@ export class SimEngine {
       recommendations: this.recommendations.map((r) => ({ ...r })),
       workOrders: this.workOrders.map((w) => ({ ...w })),
       reservation: this.reservation ? { ...this.reservation } : null,
+      incidents: this.incidents.map((i) => ({ ...i })),
       passengers: this.totalBoardings,
       occHistory: [...this.occHistory],
       kpi: {

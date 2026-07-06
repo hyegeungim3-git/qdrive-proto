@@ -117,6 +117,16 @@ export default function DemoControls({
         </button>
         <button
           onClick={() => {
+            engine.triggerAccident()
+            show({ msg: '🚨 접촉사고 발생 — 돌발정보·지도에 표시, 90초 후 처리중 전환', targetTab: 'city', targetLabel: '시티 대시보드' })
+          }}
+          className="whitespace-nowrap rounded-md border border-orange-500/30 bg-orange-500/10 px-2.5 py-1 text-xs font-semibold text-orange-400 hover:bg-orange-500/20"
+          title="주인공 차량 위치에 접촉사고 발생 (발생→처리중→완료 자동 전이)"
+        >
+          🚨 사고
+        </button>
+        <button
+          onClick={() => {
             engine.cycleWeather()
             show({ msg: '🌦 날씨 전환 — 시티·기사·승객·차고지 4개 화면에 동시 반영', targetTab: 'city', targetLabel: '시티 대시보드' })
           }}

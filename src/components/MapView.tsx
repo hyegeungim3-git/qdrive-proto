@@ -5,7 +5,17 @@ import { useTheme } from '../theme'
 import { DAEGU_CENTER, ROUTES } from '../sim/routes'
 import { indexPolyline, pointAt } from '../sim/geo'
 import type { RealBus } from '../sim/bis'
-import type { Packet409, VehicleState } from '../sim/types'
+import type { Incident, Packet409, VehicleState } from '../sim/types'
+
+const INCIDENT_ICON: Record<Incident['kind'], string> = { 사고: '🚨', 고장: '🔧', 공사: '🚧', 기타: '⚠️' }
+
+function incidentIcon(inc: Incident): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div class="incident-marker${inc.status === '발생' ? ' fresh' : ''}">${INCIDENT_ICON[inc.kind]}</div>`,
+    iconSize: [0, 0],
+  })
+}
 
 const ROUTE_IDX = new Map(ROUTES.map((r) => [r.id, indexPolyline(r.points)]))
 
@@ -76,12 +86,14 @@ export default function MapView({
   showHeat,
   highlightRouteId,
   realBuses = [],
+  incidents = [],
 }: {
   vehicles: VehicleState[]
   events: Packet409[]
   showHeat: boolean
   highlightRouteId?: string | null
   realBuses?: RealBus[]
+  incidents?: Incident[]
 }) {
   const cells = useMemo(() => (showHeat ? heatCells(events) : []), [events, showHeat])
   const theme = useTheme()
@@ -145,6 +157,22 @@ export default function MapView({
           <Tooltip direction="top">위험운전 {c.count}건</Tooltip>
         </CircleMarker>
       ))}
+
+      {/* 돌발정보 마커 */}
+      {incidents
+        .filter((i) => i.status !== '완료' && i.lat != null && i.lng != null)
+        .map((i) => (
+          <Marker key={`inc-${i.id}`} position={[i.lat!, i.lng!]} icon={incidentIcon(i)}>
+            <Tooltip direction="top" offset={[0, -12]}>
+              <div style={{ fontSize: 11 }}>
+                <b>
+                  [{i.kind}·{i.status}]
+                </b>{' '}
+                {i.title}
+              </div>
+            </Tooltip>
+          </Marker>
+        ))}
 
       {/* BIS 실데이터 버스 (TAGO 오픈API) */}
       {realBuses.map((b) => (

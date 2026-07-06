@@ -54,6 +54,12 @@ function CongestionBadge({ occupancy }: { occupancy: number }) {
 
 /** 시민안내 에이전트 — 운영 데이터를 시민용 문장으로 변환 */
 function cityNotice(snap: SimSnapshot): { text: string; tone: 'info' | 'ok' } {
+  const accident = snap.incidents.find((i) => i.kind === '사고' && i.status !== '완료')
+  if (accident)
+    return {
+      text: `${accident.title.split(' — ')[0]}가 발생해 해당 구간이 일시 지연될 수 있습니다. 안전 조치 중이니 양해 부탁드립니다.`,
+      tone: 'info',
+    }
   if (snap.weather.condition === '폭우')
     return {
       text: `호우로 전 노선이 평소보다 약 ${snap.weather.delayForecastMin}분 지연될 수 있습니다. 버스가 안전 속도로 운행 중이니 양해 부탁드립니다.`,

@@ -7,9 +7,10 @@ import { DEFAULT_ROUTES, getBisKey, setBisKey, startBis, stopBis, useBis } from 
 import { ROUTES } from '../sim/routes'
 
 /* ── 위젯 커스터마이즈 (표시 여부 localStorage 유지) ── */
-type WidgetId = 'ops' | 'riders' | 'alerts' | 'occ' | 'kpi' | 'bis' | 'routes' | 'feed'
+type WidgetId = 'ops' | 'incidents' | 'riders' | 'alerts' | 'occ' | 'kpi' | 'bis' | 'routes' | 'feed'
 const WIDGET_DEFS: { id: WidgetId; label: string }[] = [
   { id: 'ops', label: '운행 현황' },
+  { id: 'incidents', label: '돌발정보' },
   { id: 'riders', label: '이용객 수' },
   { id: 'alerts', label: '이상 현황' },
   { id: 'occ', label: '혼잡 추이' },
@@ -167,6 +168,63 @@ export default function CityDashboard() {
           </Panel>
         )}
 
+        {prefs.incidents && (
+          <Panel
+            title="🚨 돌발정보"
+            right={
+              <span className="text-[10px] text-gray-500">
+                진행 {snap.incidents.filter((i) => i.status !== '완료').length}건
+              </span>
+            }
+          >
+            <div className="grid grid-cols-4 gap-1 text-center">
+              {(
+                [
+                  ['사고', '#ef4444'],
+                  ['고장', '#f59e0b'],
+                  ['공사', '#6b7280'],
+                  ['기타', '#6366f1'],
+                ] as const
+              ).map(([kind, color]) => {
+                const occur = snap.incidents.filter((i) => i.kind === kind && i.status === '발생').length
+                const doing = snap.incidents.filter((i) => i.kind === kind && i.status === '처리중').length
+                return (
+                  <div key={kind} className="rounded-md px-1 py-1.5" style={{ background: `${color}18`, border: `1px solid ${color}40` }}>
+                    <div className="text-[10px] font-bold" style={{ color }}>
+                      {kind}
+                    </div>
+                    <div className="mt-0.5 text-[9px] leading-tight text-gray-400">
+                      발생 <b className={occur > 0 ? 'text-red-400' : 'text-gray-300'}>{occur}</b>
+                      <br />
+                      처리중 <b className="text-gray-300">{doing}</b>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-1.5 space-y-1">
+              {snap.incidents
+                .filter((i) => i.status !== '완료')
+                .slice(0, 4)
+                .map((i) => (
+                  <div key={i.id} className="flex items-center gap-1.5 rounded-md bg-gray-800/40 px-2 py-1 text-[10px]">
+                    <span
+                      className={`shrink-0 rounded px-1 font-bold ${
+                        i.status === '발생' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/15 text-amber-400'
+                      }`}
+                    >
+                      {i.status}
+                    </span>
+                    <span className="truncate text-gray-300">{i.title}</span>
+                  </div>
+                ))}
+              {snap.incidents.every((i) => i.status === '완료') && (
+                <div className="py-1 text-center text-[10px] text-gray-600">진행 중인 돌발상황 없음</div>
+              )}
+            </div>
+          </Panel>
+        )}
+
         {prefs.riders && (
           <Panel title="🧍 이용객 수" right={<span className="text-[10px] text-gray-500">오늘 누적</span>}>
             <div className="flex items-end justify-between">
@@ -245,6 +303,7 @@ export default function CityDashboard() {
           showHeat={showHeat}
           highlightRouteId={highlightRouteId}
           realBuses={filteredReal}
+          incidents={snap.incidents}
         />
         {/* 날씨 칩 */}
         <div className="absolute left-3 top-3 z-[1000] flex items-center gap-2 rounded-md border border-gray-800 bg-gray-900/90 px-3 py-1.5 text-xs text-gray-300">

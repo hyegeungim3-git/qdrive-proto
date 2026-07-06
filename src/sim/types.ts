@@ -125,6 +125,17 @@ export interface Complaint {
   evidence?: ComplaintEvidence
 }
 
+/** 돌발정보 — 사고·고장·공사·기타 인시던트 (발생→처리중→완료 라이프사이클) */
+export interface Incident {
+  id: number
+  kind: '사고' | '고장' | '공사' | '기타'
+  title: string
+  lat?: number
+  lng?: number
+  status: '발생' | '처리중' | '완료'
+  createdAt: number
+}
+
 /** 하차 예약 — 승객이 목적지를 지정하면 도착 전 하차벨 자동 전달 */
 export interface AlightReservation {
   vehicleId: string
@@ -181,6 +192,7 @@ export interface SimSnapshot {
   recommendations: DispatchRecommendation[]
   workOrders: WorkOrder[]
   reservation: AlightReservation | null
+  incidents: Incident[]
   /** 오늘 누적 탑승객 (정류장 승차 집계) */
   passengers: number
   /** 평균 재차율 시계열 (30초 샘플, 혼잡 추이 차트용) */
