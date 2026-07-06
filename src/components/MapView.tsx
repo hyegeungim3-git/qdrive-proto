@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip } from 'react-leaflet'
+import { useEffect, useMemo } from 'react'
+import { Circle, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useTheme } from '../theme'
 import { DAEGU_CENTER, ROUTES } from '../sim/routes'
@@ -8,13 +8,30 @@ import type { RealBus } from '../sim/bis'
 import type { Incident, Packet409, VehicleState } from '../sim/types'
 
 const INCIDENT_ICON: Record<Incident['kind'], string> = { 사고: '🚨', 고장: '🔧', 공사: '🚧', 기타: '⚠️' }
+const INCIDENT_COLOR: Record<Incident['kind'], string> = { 사고: '#ef4444', 고장: '#f59e0b', 공사: '#9ca3af', 기타: '#6366f1' }
+/** 영향 반경 (m) — 지도에 반투명 서클로 표시 */
+const INCIDENT_RADIUS: Record<Incident['kind'], number> = { 사고: 250, 고장: 120, 공사: 150, 기타: 0 }
 
 function incidentIcon(inc: Incident): L.DivIcon {
+  const c = INCIDENT_COLOR[inc.kind]
   return L.divIcon({
     className: '',
-    html: `<div class="incident-marker${inc.status === '발생' ? ' fresh' : ''}">${INCIDENT_ICON[inc.kind]}</div>`,
+    html: `<div class="incident-marker${inc.status === '발생' ? ' fresh' : ''}">
+      <span class="badge" style="border-color:${c};background:${c}2b">${INCIDENT_ICON[inc.kind]}</span>
+      <span class="tag" style="color:${c};border-color:${c}66">${inc.kind} · ${inc.status}</span>
+    </div>`,
     iconSize: [0, 0],
   })
+}
+
+/** 패널에서 인시던트 클릭 시 지도 이동 */
+function FlyTo({ target }: { target: { lat: number; lng: number; nonce: number } | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!target) return
+    map.flyTo([target.lat, target.lng], 15, { duration: 0.8 })
+  }, [target, map])
+  return null
 }
 
 const ROUTE_IDX = new Map(ROUTES.map((r) => [r.id, indexPolyline(r.points)]))
@@ -87,6 +104,7 @@ export default function MapView({
   highlightRouteId,
   realBuses = [],
   incidents = [],
+  focusTarget = null,
 }: {
   vehicles: VehicleState[]
   events: Packet409[]
@@ -94,6 +112,7 @@ export default function MapView({
   highlightRouteId?: string | null
   realBuses?: RealBus[]
   incidents?: Incident[]
+  focusTarget?: { lat: number; lng: number; nonce: number } | null
 }) {
   const cells = useMemo(() => (showHeat ? heatCells(events) : []), [events, showHeat])
   const theme = useTheme()
@@ -158,20 +177,40 @@ export default function MapView({
         </CircleMarker>
       ))}
 
-      {/* 돌발정보 마커 */}
+      <FlyTo target={focusTarget} />
+
+      {/* 돌발정보 — 영향 반경 서클 + 배지 마커 */}
       {incidents
         .filter((i) => i.status !== '완료' && i.lat != null && i.lng != null)
         .map((i) => (
-          <Marker key={`inc-${i.id}`} position={[i.lat!, i.lng!]} icon={incidentIcon(i)}>
-            <Tooltip direction="top" offset={[0, -12]}>
-              <div style={{ fontSize: 11 }}>
-                <b>
-                  [{i.kind}·{i.status}]
-                </b>{' '}
-                {i.title}
-              </div>
-            </Tooltip>
-          </Marker>
+          <span key={`inc-${i.id}`}>
+            {INCIDENT_RADIUS[i.kind] > 0 && (
+              <Circle
+                center={[i.lat!, i.lng!]}
+                radius={INCIDENT_RADIUS[i.kind]}
+                pathOptions={{
+                  color: INCIDENT_COLOR[i.kind],
+                  weight: 1.5,
+                  opacity: i.status === '발생' ? 0.7 : 0.4,
+                  fillColor: INCIDENT_COLOR[i.kind],
+                  fillOpacity: i.status === '발생' ? 0.12 : 0.06,
+                  dashArray: i.kind === '공사' ? '6 5' : undefined,
+                }}
+              />
+            )}
+            <Marker position={[i.lat!, i.lng!]} icon={incidentIcon(i)} zIndexOffset={500}>
+              <Tooltip direction="top" offset={[0, -20]}>
+                <div style={{ fontSize: 11 }}>
+                  <b>
+                    [{i.kind}·{i.status}]
+                  </b>{' '}
+                  {i.title}
+                  <br />
+                  영향 반경 약 {INCIDENT_RADIUS[i.kind] || '—'}m
+                </div>
+              </Tooltip>
+            </Marker>
+          </span>
         ))}
 
       {/* BIS 실데이터 버스 (TAGO 오픈API) */}

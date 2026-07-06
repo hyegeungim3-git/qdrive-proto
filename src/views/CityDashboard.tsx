@@ -85,6 +85,7 @@ export default function CityDashboard() {
   const [showPrefs, setShowPrefs] = useState(false)
   const [routeFilter, setRouteFilter] = useState<Set<string>>(new Set(DEFAULT_ROUTES))
   const [showPrevDay, setShowPrevDay] = useState(true)
+  const [focusTarget, setFocusTarget] = useState<{ lat: number; lng: number; nonce: number } | null>(null)
 
   const togglePref = (id: WidgetId) =>
     setPrefs((p) => {
@@ -224,7 +225,15 @@ export default function CityDashboard() {
                 .filter((i) => i.status !== '완료')
                 .slice(0, 4)
                 .map((i) => (
-                  <div key={i.id} className="flex items-center gap-1.5 rounded-md bg-gray-800/40 px-2 py-1 text-[10px]">
+                  <button
+                    key={i.id}
+                    onClick={() => i.lat != null && setFocusTarget({ lat: i.lat, lng: i.lng!, nonce: Date.now() })}
+                    disabled={i.lat == null}
+                    className={`flex w-full items-center gap-1.5 rounded-md bg-gray-800/40 px-2 py-1 text-left text-[10px] ${
+                      i.lat != null ? 'hover:bg-gray-800' : 'cursor-default'
+                    }`}
+                    title={i.lat != null ? '클릭하면 지도에서 위치 확인' : undefined}
+                  >
                     <span
                       className={`shrink-0 rounded px-1 font-bold ${
                         i.status === '발생' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/15 text-amber-400'
@@ -233,7 +242,8 @@ export default function CityDashboard() {
                       {i.status}
                     </span>
                     <span className="truncate text-gray-300">{i.title}</span>
-                  </div>
+                    {i.lat != null && <span className="ml-auto shrink-0 text-gray-600">📍</span>}
+                  </button>
                 ))}
               {snap.incidents.every((i) => i.status === '완료') && (
                 <div className="py-1 text-center text-[10px] text-gray-600">진행 중인 돌발상황 없음</div>
@@ -407,6 +417,7 @@ export default function CityDashboard() {
           highlightRouteId={highlightRouteId}
           realBuses={filteredReal}
           incidents={snap.incidents}
+          focusTarget={focusTarget}
         />
         {/* 날씨 칩 */}
         <div className="absolute left-3 top-3 z-[1000] flex items-center gap-2 rounded-md border border-gray-800 bg-gray-900/90 px-3 py-1.5 text-xs text-gray-300">

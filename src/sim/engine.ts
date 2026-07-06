@@ -545,11 +545,14 @@ export class SimEngine {
     }
     if (!f.predicted && f.coolantTemp >= 100) {
       f.predicted = true
-      // 돌발정보: 고장 인시던트 발생
+      // 돌발정보: 고장 인시던트 발생 (해당 차량 현재 위치)
+      const fv = this.vehicles.find((x) => x.id === f.vehicleId)
       this.incidents.unshift({
         id: this.incidentSeq++,
         kind: '고장',
         title: `${f.vehicleId.slice(-4)}호 ${f.kind} — 예방정비 예정`,
+        lat: fv?.lat,
+        lng: fv?.lng,
         status: '발생',
         createdAt: this.simTime,
       })

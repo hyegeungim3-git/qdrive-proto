@@ -190,23 +190,51 @@ html.light .bus-marker .bus-svg {
   border-color: rgba(56, 189, 248, 0.4);
 }
 
-/* 돌발정보 마커 */
+/* 돌발정보 마커 — 컬러 배지 + 유형·상태 태그 */
 .incident-marker {
-  font-size: 20px;
-  line-height: 1;
-  transform: translate(-10px, -12px);
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translate(-16px, -16px);
+  white-space: nowrap;
 }
-.incident-marker.fresh {
+.incident-marker .badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 9999px;
+  border: 2px solid;
+  backdrop-filter: blur(2px);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+.incident-marker .tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid;
+  background: rgba(11, 15, 23, 0.85);
+}
+html.light .incident-marker .tag {
+  background: rgba(255, 255, 255, 0.92);
+}
+.incident-marker.fresh .badge {
   animation: incident-pulse 1s ease-in-out infinite;
 }
 @keyframes incident-pulse {
   0%,
   100% {
-    transform: translate(-10px, -12px) scale(1);
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
   }
   50% {
-    transform: translate(-10px, -12px) scale(1.25);
+    transform: scale(1.15);
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
   }
 }
 
