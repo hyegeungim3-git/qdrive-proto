@@ -26,7 +26,7 @@ export interface BisState {
 
 const CITY_CODE = 22 // 대구광역시
 const POLL_MS = 15000
-const DEFAULT_ROUTES = ['급행1', '급행3', '순환2']
+export const DEFAULT_ROUTES = ['급행1', '급행3', '급행10', '순환2']
 const KEY_STORAGE = 'qdrive-bis-key'
 
 /**

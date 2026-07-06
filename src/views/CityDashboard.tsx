@@ -2,7 +2,7 @@ import { useState } from 'react'
 import MapView from '../components/MapView'
 import { KpiCard, Panel, simClock } from '../components/ui'
 import { engine, useSim } from '../sim/store'
-import { getBisKey, setBisKey, startBis, stopBis, useBis } from '../sim/bis'
+import { DEFAULT_ROUTES, getBisKey, setBisKey, startBis, stopBis, useBis } from '../sim/bis'
 import { ROUTES } from '../sim/routes'
 
 export default function CityDashboard() {
@@ -93,7 +93,7 @@ export default function CityDashboard() {
             {bis.status === 'idle' && (
               <div className="flex items-center justify-between">
                 <span className="text-gray-500">
-                  실제 대구 버스({['급행1', '급행3', '순환2'].join('·')}) 위치를 지도에 오버레이
+                  실제 대구 버스({DEFAULT_ROUTES.join('·')}) 위치를 지도에 오버레이
                   {!import.meta.env.DEV && ' — 프록시 경유, 키 입력 불필요'}
                 </span>
                 <button
