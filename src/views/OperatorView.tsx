@@ -7,9 +7,11 @@ import { RISK_EVENT_TYPES } from '../sim/types'
 import Scanner from './operator/Scanner'
 import MaintChat from './operator/MaintChat'
 import Depot from './operator/Depot'
+import TripsLog from './operator/TripsLog'
 
 const SUB_TABS = [
   { id: 'ops', label: '관제 현황' },
+  { id: 'trips', label: '운행 이력' },
   { id: 'scanner', label: '진단 스캐너' },
   { id: 'chat', label: 'AI+ 정비도우미' },
   { id: 'depot', label: '차고지·충전' },
@@ -49,6 +51,7 @@ export default function OperatorView() {
       <div className="flex h-full flex-col gap-3">
         {subNav}
         <div className="min-h-0 flex-1">
+          {sub === 'trips' && <TripsLog />}
           {sub === 'scanner' && <Scanner />}
           {sub === 'chat' && <MaintChat />}
           {sub === 'depot' && <Depot />}
