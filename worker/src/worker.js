@@ -44,7 +44,8 @@ export default {
     for (const [k, v] of url.searchParams) {
       if (k !== 'serviceKey') upstream.searchParams.set(k, v)
     }
-    const finalUrl = upstream.toString() + '&serviceKey=' + env.TAGO_KEY
+    // trim(): secret 등록 시 셸이 붙인 개행 방어 (PowerShell echo가 CRLF를 붙여 인증 실패했던 사례)
+    const finalUrl = upstream.toString() + '&serviceKey=' + (env.TAGO_KEY || '').trim()
 
     const res = await fetch(finalUrl, { headers: { Accept: 'application/json' } })
     const body = await res.text()
