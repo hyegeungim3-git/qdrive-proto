@@ -90,25 +90,20 @@ export default function CityDashboard() {
           }
         >
           <div className="space-y-2 text-xs">
-            {bis.status === 'idle' &&
-              (import.meta.env.DEV ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">
-                    실제 대구 버스({['급행1', '급행3', '순환2'].join('·')}) 위치를 지도에 오버레이
-                  </span>
-                  <button
-                    onClick={() => (getBisKey() ? startBis() : setShowKeyForm(true))}
-                    className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
-                  >
-                    연동 시작
-                  </button>
-                </div>
-              ) : (
+            {bis.status === 'idle' && (
+              <div className="flex items-center justify-between">
                 <span className="text-gray-500">
-                  실제 대구 버스 위치 오버레이(TAGO 오픈API)는 <b className="text-gray-400">로컬 실행</b>
-                  에서 지원 — 공공데이터포털 프록시 필요 (README 참고)
+                  실제 대구 버스({['급행1', '급행3', '순환2'].join('·')}) 위치를 지도에 오버레이
+                  {!import.meta.env.DEV && ' — 프록시 경유, 키 입력 불필요'}
                 </span>
-              ))}
+                <button
+                  onClick={() => (import.meta.env.DEV && !getBisKey() ? setShowKeyForm(true) : startBis())}
+                  className="rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-sky-500"
+                >
+                  연동 시작
+                </button>
+              </div>
+            )}
             {bis.status === 'loading' && <div className="text-sky-300">⏳ {bis.message || '연결 중…'}</div>}
             {bis.status === 'ok' && (
               <div className="flex items-center justify-between">
@@ -127,15 +122,24 @@ export default function CityDashboard() {
             {bis.status === 'error' && (
               <div className="flex items-center justify-between gap-2">
                 <span className="text-red-400">⚠ {bis.message}</span>
-                <button
-                  onClick={() => setShowKeyForm(true)}
-                  className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
-                >
-                  키 설정
-                </button>
+                {import.meta.env.DEV ? (
+                  <button
+                    onClick={() => setShowKeyForm(true)}
+                    className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
+                  >
+                    키 설정
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => startBis()}
+                    className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400 hover:text-gray-200"
+                  >
+                    다시 시도
+                  </button>
+                )}
               </div>
             )}
-            {(showKeyForm || (bis.status === 'error' && !getBisKey())) && (
+            {import.meta.env.DEV && (showKeyForm || (bis.status === 'error' && !getBisKey())) && (
               <div className="flex gap-2">
                 <input
                   value={keyInput}

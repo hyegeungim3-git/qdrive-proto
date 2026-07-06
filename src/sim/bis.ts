@@ -29,6 +29,13 @@ const POLL_MS = 15000
 const DEFAULT_ROUTES = ['급행1', '급행3', '순환2']
 const KEY_STORAGE = 'qdrive-bis-key'
 
+/**
+ * 배포판(GitHub Pages)은 Cloudflare Worker 프록시 경유 — 키가 Worker 비밀변수에 있어
+ * 사용자 키 입력이 필요 없다. 로컬 개발은 Vite 프록시(/tago) + localStorage 키.
+ */
+const IS_DEV = import.meta.env.DEV
+const WORKER_BASE = 'https://qdrive-bis-proxy.hyegeungim3.workers.dev' // 배포 후 실제 URL로 확정
+
 let state: BisState = { status: 'idle', message: '', buses: [], lastUpdated: null, matchedRoutes: [] }
 const listeners = new Set<() => void>()
 let timer: ReturnType<typeof setInterval> | null = null
@@ -54,7 +61,9 @@ function encodedKey(): string {
 }
 
 async function tago(path: string, params: string): Promise<any> {
-  const url = `/tago/1613000/${path}?serviceKey=${encodedKey()}&_type=json&${params}`
+  const url = IS_DEV
+    ? `/tago/1613000/${path}?serviceKey=${encodedKey()}&_type=json&${params}`
+    : `${WORKER_BASE}/1613000/${path}?_type=json&${params}`
   const res = await fetch(url)
   const text = await res.text()
   // 키 오류 등은 XML 또는 평문으로 반환됨
@@ -111,7 +120,7 @@ async function pollOnce(): Promise<void> {
 
 export async function startBis(routeNos: string[] = DEFAULT_ROUTES): Promise<void> {
   stopBis()
-  if (!getBisKey()) {
+  if (IS_DEV && !getBisKey()) {
     emit({ status: 'error', message: '인증키가 없습니다. data.go.kr에서 발급한 키를 입력하세요.' })
     return
   }
