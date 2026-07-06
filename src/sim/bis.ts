@@ -12,6 +12,8 @@ export interface RealBus {
   routeNo: string
   lat: number
   lng: number
+  /** 방면 (nodeord 1xxx=기점→종점, 2xxx=종점→기점 인코딩에서 도출) */
+  heading: string
 }
 
 export type BisStatus = 'idle' | 'loading' | 'ok' | 'error'
@@ -39,7 +41,14 @@ const WORKER_BASE = 'https://qdrive-bis-proxy.hyegeungim3.workers.dev' // 배포
 let state: BisState = { status: 'idle', message: '', buses: [], lastUpdated: null, matchedRoutes: [] }
 const listeners = new Set<() => void>()
 let timer: ReturnType<typeof setInterval> | null = null
-let routeIds: { routeId: string; routeNo: string }[] = []
+let routeIds: { routeId: string; routeNo: string; startName: string; endName: string }[] = []
+
+/** 종점 표기 정리: "매곡(종점)" → "매곡", "동화시설집단지구(종점)1" → "동화시설집단지구" */
+function cleanTerminus(name: unknown): string {
+  return String(name ?? '')
+    .replace(/\(.*?\)\d*$/, '')
+    .trim()
+}
 
 function emit(next: Partial<BisState>) {
   state = { ...state, ...next }
@@ -87,14 +96,20 @@ function asItems(body: any): any[] {
 }
 
 async function resolveRouteIds(routeNos: string[]): Promise<void> {
-  const found: { routeId: string; routeNo: string }[] = []
+  const found: typeof routeIds = []
   for (const no of routeNos) {
     const body = await tago(
       'BusRouteInfoInqireService/getRouteNoList',
       `cityCode=${CITY_CODE}&routeNo=${encodeURIComponent(no)}&numOfRows=20`,
     )
     const exact = asItems(body).find((x) => String(x.routeno) === no)
-    if (exact) found.push({ routeId: String(exact.routeid), routeNo: no })
+    if (exact)
+      found.push({
+        routeId: String(exact.routeid),
+        routeNo: no,
+        startName: cleanTerminus(exact.startnodenm),
+        endName: cleanTerminus(exact.endnodenm),
+      })
   }
   routeIds = found
 }
@@ -107,11 +122,15 @@ async function pollOnce(): Promise<void> {
       `cityCode=${CITY_CODE}&routeId=${encodeURIComponent(r.routeId)}&numOfRows=100`,
     )
     for (const it of asItems(body)) {
+      // 대구 BIS의 nodeord: 1xxx = 기점→종점 방향, 2xxx = 종점→기점 방향
+      const dirCode = Math.floor(Number(it.nodeord ?? 0) / 1000)
+      const heading = dirCode === 1 ? r.endName : dirCode === 2 ? r.startName : ''
       buses.push({
         vehicleNo: String(it.vehicleno ?? ''),
         routeNo: r.routeNo,
         lat: Number(it.gpslati),
         lng: Number(it.gpslong),
+        heading,
       })
     }
   }

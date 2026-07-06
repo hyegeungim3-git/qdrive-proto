@@ -83,7 +83,11 @@ export default function DriverApp() {
               </span>
               <span className="flex items-center gap-2 text-sm text-gray-300">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: route.color }} />
-                <b>{route.name}</b> · {v.id.slice(-4)}호 · {v.driverName} 기사님
+                <b>{route.name}</b>
+                <span className="text-sky-300">
+                  {route.loop ? '순환' : `${(v.dir === 1 ? route.stops[route.stops.length - 1] : route.stops[0]).name} 방면`}
+                </span>
+                · {v.id.slice(-4)}호 · {v.driverName} 기사님
               </span>
             </div>
             <div className="flex items-center gap-4 text-sm">

@@ -51,14 +51,23 @@ function heatCells(events: Packet409[]) {
 }
 
 function realBusIcon(b: RealBus): L.DivIcon {
+  const dir = b.heading ? ` ▸${b.heading.slice(0, 5)}` : ''
   return L.divIcon({
     className: '',
     html: `<div class="bus-marker real">
       <span class="bus-body">${busSvg('#38bdf8', true)}</span>
-      <span class="label">실 ${b.routeNo}</span>
+      <span class="label">실 ${b.routeNo}${dir}</span>
     </div>`,
     iconSize: [0, 0],
   })
+}
+
+/** 시뮬레이션 버스의 방면 라벨 (순환선은 '순환') */
+function simHeading(v: VehicleState): string {
+  const route = ROUTES.find((r) => r.id === v.routeId)!
+  if (route.loop) return '순환'
+  const terminus = v.dir === 1 ? route.stops[route.stops.length - 1].name : route.stops[0].name
+  return `${terminus} 방면`
 }
 
 export default function MapView({
@@ -143,6 +152,12 @@ export default function MapView({
           <Tooltip direction="top" offset={[0, -10]}>
             <div style={{ fontSize: 11 }}>
               <b>{b.vehicleNo}</b> · {b.routeNo}
+              {b.heading && (
+                <>
+                  <br />
+                  <b>{b.heading} 방면</b>
+                </>
+              )}
               <br />
               대구 BIS 실데이터 (TAGO)
             </div>
@@ -158,7 +173,7 @@ export default function MapView({
           <Marker key={v.id} position={[v.lat, v.lng]} icon={busIcon(v, route.color, warn)}>
             <Tooltip direction="top" offset={[0, -10]}>
               <div style={{ fontSize: 11 }}>
-                <b>{v.id}</b> · {route.name}
+                <b>{v.id}</b> · {route.name} · <b>{simHeading(v)}</b>
                 <br />
                 {v.driverName} 기사 · {Math.round(v.speedKmh)} km/h
               </div>
