@@ -1,8 +1,11 @@
 import { useSim } from '../sim/store'
 import { DEMO_VEHICLE_ID } from '../sim/engine'
 import { ROUTES } from '../sim/routes'
+import { indexPolyline } from '../sim/geo'
 import { RISK_EVENT_TYPES } from '../sim/types'
 import { simClock } from '../components/ui'
+
+const ROUTE_TOTAL_M = new Map(ROUTES.map((r) => [r.id, indexPolyline(r.points).totalM]))
 
 /**
  * 운전석 인포테인먼트 — 12.3인치 차량 거치 태블릿 상시 표출용.
@@ -69,6 +72,13 @@ export default function DriverApp() {
   const coach = coaching(v, warnActive)
   const rank = [...snap.vehicles].sort((a, b) => b.score - a.score).findIndex((x) => x.id === v.id) + 1
 
+  // 노선 진행 현황 (기점→종점, 방향 반영)
+  const totalM = ROUTE_TOTAL_M.get(v.routeId)!
+  const rawPct = Math.max(0, Math.min(1, v.odoOnRoute / totalM))
+  const pct = route.loop || v.dir === 1 ? rawPct : 1 - rawPct
+  const fromStop = route.loop ? route.stops[0].name : (v.dir === 1 ? route.stops[0] : route.stops[route.stops.length - 1]).name
+  const toStop = route.loop ? '' : (v.dir === 1 ? route.stops[route.stops.length - 1] : route.stops[0]).name
+
   return (
     <div className="flex h-full flex-col items-center justify-start gap-4 overflow-y-auto py-1">
       {/* 12.3" 태블릿 프레임 (가로형, 차량 거치) */}
@@ -108,14 +118,16 @@ export default function DriverApp() {
           </div>
 
           {/* 본문 3열 */}
-          <div className="grid h-[calc(100%-52px)] grid-cols-[250px_1fr_270px] gap-4 p-4">
-            {/* 좌: 점수 */}
-            <div className="flex flex-col items-center gap-2 rounded-2xl bg-gray-900/60 py-4">
-              <ScoreGauge score={v.score} />
-              <div className="px-3 text-center text-[10px] leading-relaxed text-gray-600">
-                ⚖ 노선 난이도·시간대·날씨 보정 적용
+          <div className="grid h-[calc(100%-52px)] grid-cols-[250px_1fr_270px] gap-3 p-3">
+            {/* 좌: 점수 + 오늘 누계 */}
+            <div className="flex flex-col items-center justify-between rounded-2xl bg-gray-900/60 py-3">
+              <div className="flex flex-col items-center">
+                <ScoreGauge score={v.score} />
+                <div className="px-3 text-center text-[10px] leading-relaxed text-gray-600">
+                  ⚖ 노선 난이도·시간대·날씨 보정 적용
+                </div>
               </div>
-              <div className="mt-auto grid w-full grid-cols-4 gap-1 px-3">
+              <div className="grid w-full grid-cols-4 gap-1 px-3">
                 {RISK_EVENT_TYPES.map((t) => (
                   <div key={t} className="rounded-md bg-gray-800/60 py-1 text-center">
                     <div className="text-[8px] text-gray-500">{t}</div>
@@ -125,31 +137,87 @@ export default function DriverApp() {
                   </div>
                 ))}
               </div>
+              <div className="grid w-full grid-cols-2 gap-1 px-3">
+                <div className="rounded-md bg-gray-800/60 py-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">오늘 주행</div>
+                  <div className="text-base font-bold tabular-nums text-gray-200">{v.distanceKm.toFixed(1)}<span className="ml-0.5 text-[9px] font-medium text-gray-500">km</span></div>
+                </div>
+                <div className="rounded-md bg-gray-800/60 py-1.5 text-center">
+                  <div className="text-[9px] text-gray-500">CNG 사용</div>
+                  <div className="text-base font-bold tabular-nums text-gray-200">{v.fuelM3.toFixed(1)}<span className="ml-0.5 text-[9px] font-medium text-gray-500">m³</span></div>
+                </div>
+              </div>
             </div>
 
             {/* 중앙: 속도 + 다음 정류장 */}
             <div className="flex flex-col gap-3">
-              <div className="flex flex-1 items-center justify-center gap-10 rounded-2xl bg-gray-900/60">
-                <div className="text-center">
-                  <div className="text-[88px] font-black leading-none tracking-tighter tabular-nums text-gray-50">
-                    {Math.round(v.speedKmh)}
+              <div className="flex flex-1 flex-col rounded-2xl bg-gray-900/60">
+                <div className="flex flex-1 items-center justify-center gap-10">
+                  <div className="text-center">
+                    <div className="text-[88px] font-black leading-none tracking-tighter tabular-nums text-gray-50">
+                      {Math.round(v.speedKmh)}
+                    </div>
+                    <div className="mt-1 whitespace-nowrap text-sm text-gray-500">km/h · 차량속도 (내부)</div>
                   </div>
-                  <div className="mt-1 whitespace-nowrap text-sm text-gray-500">km/h · 차량속도 (내부)</div>
+                  <div className="space-y-3 text-center">
+                    <div>
+                      <div className="text-3xl font-bold tabular-nums text-gray-300">{v.rpm}</div>
+                      <div className="text-[10px] text-gray-600">RPM</div>
+                    </div>
+                    <div className="h-2 w-28 overflow-hidden rounded-full bg-gray-800">
+                      <div
+                        className={`h-full transition-all ${v.rpm > 2200 ? 'bg-red-500' : v.rpm > 1700 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                        style={{ width: `${Math.min(100, (v.rpm / 2800) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-gray-600">
+                      {v.rpm > 2200 ? '고RPM — 연비 저하' : '경제운전 구간'}
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-3 text-center">
-                  <div>
-                    <div className="text-3xl font-bold tabular-nums text-gray-300">{v.rpm}</div>
-                    <div className="text-[10px] text-gray-600">RPM</div>
-                  </div>
-                  <div className="h-2 w-28 overflow-hidden rounded-full bg-gray-800">
+                {/* 재차율 스트립 */}
+                <div className="flex items-center gap-3 border-t border-gray-800/60 px-6 py-2.5">
+                  <span className="whitespace-nowrap text-[11px] text-gray-500">🧍 재차율</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-800">
                     <div
-                      className={`h-full transition-all ${v.rpm > 2200 ? 'bg-red-500' : v.rpm > 1700 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                      style={{ width: `${Math.min(100, (v.rpm / 2800) * 100)}%` }}
+                      className={`h-full transition-all duration-500 ${v.occupancy >= 0.7 ? 'bg-red-500' : v.occupancy >= 0.4 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                      style={{ width: `${Math.round(v.occupancy * 100)}%` }}
                     />
                   </div>
-                  <div className="text-[10px] text-gray-600">
-                    {v.rpm > 2200 ? '고RPM — 연비 저하' : '경제운전 구간'}
-                  </div>
+                  <span className="whitespace-nowrap text-[11px] font-bold tabular-nums text-gray-300">
+                    {Math.round(v.occupancy * 100)}% ·{' '}
+                    {v.occupancy >= 0.7 ? '혼잡' : v.occupancy >= 0.4 ? '보통' : '여유'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 노선 진행 현황 */}
+              <div className="rounded-2xl bg-gray-900/60 px-6 py-3">
+                <div className="flex items-center justify-between text-[10px] text-gray-500">
+                  <span>🚏 {fromStop}</span>
+                  <span className="font-semibold text-sky-400">
+                    {route.loop ? '순환 운행 중' : `${toStop} 방면 ${Math.round(pct * 100)}%`}
+                  </span>
+                  <span>{route.loop ? '↻' : `🏁 ${toStop}`}</span>
+                </div>
+                <div className="relative mt-2 h-2 rounded-full bg-gray-800">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-sky-600/50 transition-all duration-500"
+                    style={{ width: `${pct * 100}%` }}
+                  />
+                  {route.stops.map((s) => (
+                    <span
+                      key={s.name}
+                      className="absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-600"
+                      style={{ left: `${(route.loop || v.dir === 1 ? s.at : 1 - s.at) * 100}%` }}
+                    />
+                  ))}
+                  <span
+                    className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-base leading-none transition-all duration-500"
+                    style={{ left: `${pct * 100}%`, transform: `translate(-50%,-50%)${v.dir === -1 && !route.loop ? '' : ' scaleX(-1)'}` }}
+                  >
+                    🚌
+                  </span>
                 </div>
               </div>
 
@@ -180,7 +248,7 @@ export default function DriverApp() {
             </div>
 
             {/* 우: 코칭·랭킹·알림 스택 */}
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-2.5 overflow-y-auto">
               {isFaulty && (
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
                   <div className="text-xs font-bold text-amber-300">🔧 차량 점검 예정</div>
@@ -204,7 +272,7 @@ export default function DriverApp() {
 
               {/* 실시간 코칭 */}
               <div
-                className={`rounded-xl border px-4 py-3 ${
+                className={`flex flex-1 flex-col justify-center rounded-xl border px-4 py-3 ${
                   coach.tone === 'warn' ? 'border-amber-500/30 bg-amber-500/10' : 'border-emerald-500/25 bg-emerald-500/5'
                 }`}
               >
@@ -252,20 +320,6 @@ export default function DriverApp() {
                 <div className="mt-1 flex items-end justify-between gap-2">
                   <span className="text-2xl font-extrabold tabular-nums text-emerald-400">{co2Saved.toFixed(2)}</span>
                   <span className="shrink-0 pb-0.5 text-[10px] text-gray-500">kg CO₂ 리워드</span>
-                </div>
-              </div>
-
-              <div className="mt-auto rounded-xl bg-gray-900/60 px-4 py-3">
-                <div className="text-[11px] text-gray-500">📊 오늘 운행</div>
-                <div className="mt-1 grid grid-cols-2 gap-1 text-center">
-                  <div>
-                    <div className="text-lg font-bold tabular-nums text-gray-200">{v.distanceKm.toFixed(1)}</div>
-                    <div className="text-[9px] text-gray-600">주행 km</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold tabular-nums text-gray-200">{v.fuelM3.toFixed(1)}</div>
-                    <div className="text-[9px] text-gray-600">CNG m³</div>
-                  </div>
                 </div>
               </div>
             </div>
