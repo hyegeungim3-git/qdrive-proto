@@ -369,7 +369,7 @@ export class SimEngine {
       this.occSampleTimer = 0
       const avg = this.vehicles.reduce((s, v) => s + v.occupancy, 0) / this.vehicles.length
       this.occHistory.push({ t: this.simTime, pct: Math.round(avg * 100) })
-      if (this.occHistory.length > 48) this.occHistory.shift()
+      if (this.occHistory.length > 120) this.occHistory.shift()
     }
     // 사고 인시던트 자동 전이 (발생 90초 후 처리중, 6분 후 완료)
     for (const inc of this.incidents) {

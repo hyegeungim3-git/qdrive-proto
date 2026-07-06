@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts'
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import MapView from '../components/MapView'
 import { KpiCard, Panel, simClock } from '../components/ui'
 import { engine, useSim } from '../sim/store'
@@ -59,6 +68,13 @@ function MiniDonut({ pct }: { pct: number }) {
 
 const WEATHER_ICON = { 맑음: '☀️', 폭우: '🌧️', 폭염: '🥵' } as const
 
+/** 전일 혼잡 곡선 (데모용 결정적 모의 — 실증 시 전일 실측으로 교체) */
+const prevDayPct = (t: number) =>
+  Math.round(Math.max(8, Math.min(92, 46 + 24 * Math.sin(t / 700 + 1.1) + 8 * Math.sin(t / 173))))
+
+const occLevel = (pct: number) =>
+  pct >= 70 ? (['혼잡', 'text-red-400'] as const) : pct >= 40 ? (['보통', 'text-amber-400'] as const) : (['여유', 'text-emerald-400'] as const)
+
 export default function CityDashboard() {
   const snap = useSim()
   const [showHeat, setShowHeat] = useState(true)
@@ -68,6 +84,7 @@ export default function CityDashboard() {
   const [prefs, setPrefs] = useState<Record<WidgetId, boolean>>(loadPrefs)
   const [showPrefs, setShowPrefs] = useState(false)
   const [routeFilter, setRouteFilter] = useState<Set<string>>(new Set(DEFAULT_ROUTES))
+  const [showPrevDay, setShowPrevDay] = useState(true)
 
   const togglePref = (id: WidgetId) =>
     setPrefs((p) => {
@@ -268,31 +285,117 @@ export default function CityDashboard() {
           </Panel>
         )}
 
-        {prefs.occ && (
-          <Panel
-            title="📈 혼잡 추이"
-            right={
-              <span className="text-[10px] tabular-nums text-gray-500">
-                현재 평균 {snap.occHistory.length ? snap.occHistory[snap.occHistory.length - 1].pct : '—'}%
-              </span>
-            }
-          >
-            <div className="h-20">
-              {snap.occHistory.length > 1 ? (
-                <ResponsiveContainer>
-                  <AreaChart data={snap.occHistory} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                    <YAxis domain={[0, 100]} hide />
-                    <Area type="monotone" dataKey="pct" stroke="#38bdf8" strokeWidth={2} fill="rgba(56,189,248,0.15)" isAnimationActive={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-[10px] text-gray-600">
-                  수집 중… (30초 간격 평균 재차율)
+        {prefs.occ &&
+          (() => {
+            const occData = snap.occHistory.map((d) => ({
+              time: simClock(d.t),
+              오늘: d.pct,
+              전일: prevDayPct(d.t),
+            }))
+            const lastPct = snap.occHistory.length ? snap.occHistory[snap.occHistory.length - 1].pct : null
+            const [levelLabel, levelCls] = lastPct != null ? occLevel(lastPct) : ['—', 'text-gray-500']
+            return (
+              <Panel
+                title="📈 혼잡 추이"
+                right={
+                  <button
+                    onClick={() => setShowPrevDay((s) => !s)}
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                      showPrevDay ? 'bg-sky-500/20 text-sky-300' : 'bg-gray-800 text-gray-500'
+                    }`}
+                  >
+                    전일 비교 {showPrevDay ? 'ON' : 'OFF'}
+                  </button>
+                }
+              >
+                <div className="h-32">
+                  {snap.occHistory.length > 2 ? (
+                    <ResponsiveContainer>
+                      <AreaChart data={occData} margin={{ top: 6, right: 2, left: -30, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="occFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.45} />
+                            <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.03} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid stroke="var(--color-gray-800)" strokeDasharray="3 3" vertical={false} />
+                        <XAxis
+                          dataKey="time"
+                          tick={{ fontSize: 9, fill: 'var(--color-gray-600)' }}
+                          axisLine={false}
+                          tickLine={false}
+                          minTickGap={32}
+                        />
+                        <YAxis
+                          domain={[0, 100]}
+                          ticks={[0, 40, 70, 100]}
+                          tick={{ fontSize: 9, fill: 'var(--color-gray-600)' }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <RTooltip
+                          contentStyle={{
+                            background: 'var(--color-gray-900)',
+                            border: '1px solid var(--color-gray-700)',
+                            borderRadius: 8,
+                            fontSize: 10,
+                            padding: '4px 8px',
+                          }}
+                          labelStyle={{ color: 'var(--color-gray-400)' }}
+                        />
+                        <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="4 3" strokeOpacity={0.35} />
+                        <ReferenceLine y={40} stroke="#f59e0b" strokeDasharray="4 3" strokeOpacity={0.3} />
+                        {showPrevDay && (
+                          <Area
+                            type="monotone"
+                            dataKey="전일"
+                            unit="%"
+                            stroke="#94a3b8"
+                            strokeWidth={1.5}
+                            strokeDasharray="5 4"
+                            fill="none"
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                        )}
+                        <Area
+                          type="monotone"
+                          dataKey="오늘"
+                          unit="%"
+                          stroke="#38bdf8"
+                          strokeWidth={2}
+                          fill="url(#occFill)"
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-1.5">
+                      <div className="h-1.5 w-2/3 animate-pulse rounded-full bg-gray-800" />
+                      <div className="text-[10px] text-gray-600">수집 중 — 30초 간격 평균 재차율 (배속을 올리면 빨라져요)</div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </Panel>
-        )}
+                <div className="mt-1 flex items-center justify-between text-[10px]">
+                  <span className="flex items-center gap-2 text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <span className="h-1.5 w-3 rounded-full bg-sky-400" /> 오늘
+                    </span>
+                    {showPrevDay && (
+                      <span className="flex items-center gap-1">
+                        <span className="h-0 w-3 border-t border-dashed border-gray-400" /> 전일*
+                      </span>
+                    )}
+                  </span>
+                  <span className="tabular-nums text-gray-400">
+                    현재 <b className="text-gray-200">{lastPct ?? '—'}%</b>{' '}
+                    <b className={levelCls}>{levelLabel}</b>
+                  </span>
+                </div>
+              </Panel>
+            )
+          })()}
       </div>
 
       {/* ── 중: 지도 ── */}
