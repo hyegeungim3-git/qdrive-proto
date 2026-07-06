@@ -12,7 +12,7 @@ import { RISK_EVENT_TYPES, type SimSnapshot, type VehicleState } from '../../sim
  */
 
 /** 이벤트 다발 구간을 격자 클러스터링 후 최근접 정류장 이름으로 라벨링 */
-function topZones(snap: SimSnapshot, n: number) {
+export function topZones(snap: SimSnapshot, n: number) {
   const cells = new Map<string, { lat: number; lng: number; count: number }>()
   for (const e of snap.events) {
     if (e.justified) continue
@@ -42,7 +42,7 @@ function topZones(snap: SimSnapshot, n: number) {
     })
 }
 
-interface Para {
+export interface Para {
   icon: string
   title: string
   text: string

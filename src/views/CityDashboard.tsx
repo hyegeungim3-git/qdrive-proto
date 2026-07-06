@@ -14,6 +14,7 @@ import { KpiCard, Panel, simClock } from '../components/ui'
 import { engine, useSim } from '../sim/store'
 import { DEFAULT_ROUTES, getBisKey, setBisKey, startBis, stopBis, useBis } from '../sim/bis'
 import { ROUTES } from '../sim/routes'
+import PolicyReport from './city/PolicyReport'
 
 /* ── 위젯 커스터마이즈 (표시 여부 localStorage 유지) ── */
 type WidgetId = 'ops' | 'incidents' | 'riders' | 'alerts' | 'occ' | 'kpi' | 'bis' | 'routes' | 'feed'
@@ -86,6 +87,7 @@ export default function CityDashboard() {
   const [routeFilter, setRouteFilter] = useState<Set<string>>(new Set(DEFAULT_ROUTES))
   const [showPrevDay, setShowPrevDay] = useState(true)
   const [focusTarget, setFocusTarget] = useState<{ lat: number; lng: number; nonce: number } | null>(null)
+  const [showPolicyReport, setShowPolicyReport] = useState(false)
 
   const togglePref = (id: WidgetId) =>
     setPrefs((p) => {
@@ -137,8 +139,16 @@ export default function CityDashboard() {
 
   return (
     <div className="grid h-full grid-cols-[280px_1fr_360px] gap-3">
+      {showPolicyReport && <PolicyReport onClose={() => setShowPolicyReport(false)} />}
       {/* ── 좌: 운영 통계 (신규) ── */}
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
+        {/* AI 정책 보고서 */}
+        <button
+          onClick={() => setShowPolicyReport(true)}
+          className="w-full rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-left text-[11px] font-bold text-violet-300 hover:bg-violet-500/20"
+        >
+          📑 AI 정책 보고서 <span className="float-right font-normal text-violet-400/60">전 데이터 총괄 · 자동 생성</span>
+        </button>
         {/* 위젯 구성 */}
         <div className="relative">
           <button
