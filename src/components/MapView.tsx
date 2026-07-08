@@ -29,7 +29,12 @@ function FlyTo({ target }: { target: { lat: number; lng: number; label?: string;
   const map = useMap()
   useEffect(() => {
     if (!target) return
-    map.flyTo([target.lat, target.lng], 15, { duration: 0.8 })
+    // 아코디언 등 새로 마운트되는 좁은 컨테이너에서 크기 재계산 후 이동
+    const t = setTimeout(() => {
+      map.invalidateSize()
+      map.flyTo([target.lat, target.lng], 15, { duration: 0.8 })
+    }, 60)
+    return () => clearTimeout(t)
   }, [target, map])
   if (!target) return null
   return (

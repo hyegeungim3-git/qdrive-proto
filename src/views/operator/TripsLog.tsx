@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Panel, simClock } from '../../components/ui'
+import MapView from '../../components/MapView'
 import { useSim } from '../../sim/store'
 import { ROUTES } from '../../sim/routes'
 import { indexPolyline, pointAt, haversine } from '../../sim/geo'
-import { focusMap } from '../../sim/mapFocus'
 import { RISK_EVENT_TYPES, type RiskEventType } from '../../sim/types'
 
 /** 이벤트 좌표 → 최근접 정류장 이름 */
@@ -28,10 +28,11 @@ function nearestStop(lat: number, lng: number): string {
  * 운행 이력 — qdrive.co.kr의 "운행 이력 한눈에 보기 / 안전운전 리포트" 반영.
  * 회차별 운행 시작·종료 시간, 이동 거리, 연비, 탄소 절감량 조회 (공단 521 패킷 기반).
  */
-export default function TripsLog({ onNavigate }: { onNavigate?: (tab: string) => void }) {
+export default function TripsLog() {
   const snap = useSim()
   const [vehicleFilter, setVehicleFilter] = useState('전체')
   const [typeFilter, setTypeFilter] = useState<RiskEventType | null>(null)
+  const [openKey, setOpenKey] = useState<string | null>(null)
 
   const trips = snap.trips.filter((t) => vehicleFilter === '전체' || t.vehicleId === vehicleFilter)
   const totals = trips.reduce(
@@ -41,6 +42,27 @@ export default function TripsLog({ onNavigate }: { onNavigate?: (tab: string) =>
 
   const v = vehicleFilter === '전체' ? null : snap.vehicles.find((x) => x.id === vehicleFilter)
   const riskTotal = v ? RISK_EVENT_TYPES.reduce((s, t) => s + v.eventCounts[t], 0) : null
+
+  const typeEvents =
+    v && typeFilter
+      ? snap.events.filter((e) => e.vehicleId === v.id && e.eventType === typeFilter).slice(0, 8)
+      : []
+
+  // 열린 이벤트의 좌표는 과거 기록이라 안정적 — openKey만으로 memo (매 틱 flyTo 방지)
+  const focusTarget = useMemo(() => {
+    if (!openKey || !v || !typeFilter) return null
+    const e = snap.events.find(
+      (x) => x.vehicleId === v.id && x.eventType === typeFilter && String(x.simTime) === openKey,
+    )
+    if (!e) return null
+    return {
+      lat: e.lat,
+      lng: e.lng,
+      label: `${v.id.slice(-4)}호 ${e.eventType} · ${simClock(e.simTime)}`,
+      nonce: e.simTime,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openKey])
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
@@ -133,7 +155,10 @@ export default function TripsLog({ onNavigate }: { onNavigate?: (tab: string) =>
                 return (
                   <button
                     key={t}
-                    onClick={() => setTypeFilter(typeFilter === t ? null : t)}
+                    onClick={() => {
+                      setTypeFilter(typeFilter === t ? null : t)
+                      setOpenKey(null)
+                    }}
                     disabled={!occurred}
                     title={occurred ? '클릭하면 발생 위치·상황을 확인합니다' : '발생 없음'}
                     className={`rounded-md py-1.5 text-center transition-colors ${
@@ -154,43 +179,89 @@ export default function TripsLog({ onNavigate }: { onNavigate?: (tab: string) =>
             </div>
           </div>
 
-          {/* 항목 클릭 → 발생 위치·상황 (지도 연동) */}
+          {/* 항목 클릭 → 발생 내역, 행 클릭 시 지도 아코디언 펼침 */}
           {typeFilter && (
             <div className="mt-2 rounded-md border border-sky-500/20 bg-sky-500/5 px-3 py-2">
               <div className="mb-1.5 flex items-center justify-between text-[10px]">
                 <span className="font-bold text-sky-300">
-                  📍 {typeFilter} 발생 내역 (정당 판정 포함) — 행을 클릭하면 지도로 이동
+                  📍 {typeFilter} 발생 내역 (정당 판정 포함) — 행을 클릭하면 지도가 펼쳐집니다
                 </span>
-                <button onClick={() => setTypeFilter(null)} className="text-gray-600 hover:text-gray-400">
+                <button
+                  onClick={() => {
+                    setTypeFilter(null)
+                    setOpenKey(null)
+                  }}
+                  className="text-gray-600 hover:text-gray-400"
+                >
                   ✕
                 </button>
               </div>
               <div className="space-y-1">
-                {snap.events
-                  .filter((e) => e.vehicleId === v.id && e.eventType === typeFilter)
-                  .slice(0, 8)
-                  .map((e, i) => (
-                    <button
-                      key={`${e.simTime}-${i}`}
-                      onClick={() => {
-                        focusMap(e.lat, e.lng, `${v.id.slice(-4)}호 ${e.eventType} · ${simClock(e.simTime)}`)
-                        onNavigate?.('city')
-                      }}
-                      className="flex w-full items-center gap-2 rounded-md bg-gray-800/50 px-2.5 py-1.5 text-left text-[10px] hover:bg-gray-800"
-                    >
-                      <span className="font-mono text-gray-400">{simClock(e.simTime)}</span>
-                      <span className="tabular-nums text-gray-500">{e.speedKmh}km/h · {e.rpm}rpm</span>
-                      <span className="truncate text-gray-300">{nearestStop(e.lat, e.lng)}</span>
-                      {e.justified ? (
-                        <span className="ml-auto shrink-0 rounded bg-emerald-500/15 px-1 font-bold text-emerald-400" title={e.justifyReason}>
-                          🛡 {e.justifyReason}
+                {typeEvents.map((e) => {
+                  const key = String(e.simTime)
+                  const open = openKey === key
+                  return (
+                    <div key={key}>
+                      <button
+                        onClick={() => setOpenKey(open ? null : key)}
+                        className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[10px] transition-colors ${
+                          open ? 'bg-sky-500/20 ring-1 ring-sky-500/40' : 'bg-gray-800/50 hover:bg-gray-800'
+                        }`}
+                      >
+                        <span className="shrink-0 text-gray-500">{open ? '▾' : '▸'}</span>
+                        <span className="font-mono text-gray-400">{simClock(e.simTime)}</span>
+                        <span className="tabular-nums text-gray-500">
+                          {e.speedKmh}km/h · {e.rpm}rpm
                         </span>
-                      ) : (
-                        <span className="ml-auto shrink-0 rounded bg-red-500/15 px-1 font-bold text-red-400">감점</span>
+                        <span className="truncate text-gray-300">{nearestStop(e.lat, e.lng)}</span>
+                        {e.justified ? (
+                          <span
+                            className="ml-auto shrink-0 rounded bg-emerald-500/15 px-1 font-bold text-emerald-400"
+                            title={e.justifyReason}
+                          >
+                            🛡 {e.justifyReason}
+                          </span>
+                        ) : (
+                          <span className="ml-auto shrink-0 rounded bg-red-500/15 px-1 font-bold text-red-400">감점</span>
+                        )}
+                        <span className="shrink-0 text-gray-600">🗺</span>
+                      </button>
+
+                      {open && (
+                        <div className="mt-1 overflow-hidden rounded-md border border-gray-800">
+                          <div className="h-[300px] w-full">
+                            <MapView
+                              vehicles={[]}
+                              events={[]}
+                              showHeat={false}
+                              focusTarget={focusTarget}
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-gray-900/70 px-3 py-2 text-[10px] text-gray-400">
+                            <span>
+                              🕑 <b className="text-gray-200">{simClock(e.simTime)}</b>
+                            </span>
+                            <span>
+                              📍 <b className="text-gray-200">{nearestStop(e.lat, e.lng)}</b>
+                            </span>
+                            <span className="tabular-nums">
+                              차량속도 <b className="text-gray-200">{e.speedKmh}km/h</b> · RPM{' '}
+                              <b className="text-gray-200">{e.rpm}</b>
+                            </span>
+                            <span>
+                              판정{' '}
+                              {e.justified ? (
+                                <b className="text-emerald-400">🛡 {e.justifyReason} — 감점 제외</b>
+                              ) : (
+                                <b className="text-red-400">감점 반영</b>
+                              )}
+                            </span>
+                          </div>
+                        </div>
                       )}
-                      <span className="shrink-0 text-gray-600">🗺</span>
-                    </button>
-                  ))}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
