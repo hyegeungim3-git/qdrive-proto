@@ -9,11 +9,13 @@ import MaintChat from './operator/MaintChat'
 import Depot from './operator/Depot'
 import TripsLog from './operator/TripsLog'
 import AiReport from './operator/AiReport'
+import EcoFuel from './operator/EcoFuel'
 
 const SUB_TABS = [
   { id: 'ops', label: '관제 현황' },
   { id: 'trips', label: '운행 이력' },
   { id: 'report', label: 'AI 리포트' },
+  { id: 'eco', label: '연료·에코 AI' },
   { id: 'scanner', label: '진단 스캐너' },
   { id: 'chat', label: 'AI+ 정비도우미' },
   { id: 'depot', label: '차고지·충전' },
@@ -55,6 +57,7 @@ export default function OperatorView() {
         <div className="min-h-0 flex-1">
           {sub === 'trips' && <TripsLog />}
           {sub === 'report' && <AiReport />}
+          {sub === 'eco' && <EcoFuel />}
           {sub === 'scanner' && <Scanner />}
           {sub === 'chat' && <MaintChat />}
           {sub === 'depot' && <Depot />}

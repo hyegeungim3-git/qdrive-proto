@@ -135,6 +135,10 @@ export interface VehicleState {
   lastEventWall?: number
   /** 앞차·뒤차 배차 간격 (buildSnapshot에서 계산) */
   headway?: Headway
+  /** 경제운전(관성주행) 점수 0~100 — 감속 시 조기에 발을 떼는 정도 */
+  ecoScore: number
+  /** 오늘 연료 낭비 요인별 누적(m³) — 기준선 대비, 코칭으로 줄일 수 있는 부분 */
+  fuelWaste: { idle: number; harsh: number; habit: number; ac: number }
 }
 
 /** 민원 증빙 자동매칭 결과 (Agentic — 조사 에이전트) */
