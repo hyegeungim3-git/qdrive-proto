@@ -8,6 +8,7 @@ import OperatorView from './views/OperatorView'
 import DriverApp from './views/DriverApp'
 import PassengerApp from './views/PassengerApp'
 import AgentCenter from './views/AgentCenter'
+import AgentPlatform from './views/AgentPlatform'
 import ReportView from './views/ReportView'
 import TeaserView from './views/TeaserView'
 
@@ -17,6 +18,7 @@ const TABS = [
   { id: 'driver', label: '기사 앱', sub: '운전자' },
   { id: 'passenger', label: '승객 앱', sub: '시민·승객' },
   { id: 'agent', label: 'AI 업무센터', sub: '자동화·승인' },
+  { id: 'platform', label: '에이전트 플랫폼', sub: '회사·기사' },
   { id: 'report', label: '실증 리포트', sub: 'As-Is → To-Be' },
   { id: 'roadmap', label: '로드맵', sub: '플랫폼 확장' },
 ] as const
@@ -80,6 +82,7 @@ export default function App() {
         {tab === 'driver' && <DriverApp />}
         {tab === 'passenger' && <PassengerApp />}
         {tab === 'agent' && <AgentCenter />}
+        {tab === 'platform' && <AgentPlatform />}
         {tab === 'report' && <ReportView />}
         {tab === 'roadmap' && <TeaserView />}
       </main>
