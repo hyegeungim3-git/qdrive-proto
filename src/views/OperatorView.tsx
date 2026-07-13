@@ -189,10 +189,10 @@ export default function OperatorView() {
       {/* 기사 소명함 — 급조작 직후 음성/버튼 소명 검토 (불이익 확정은 사람이) */}
       {snap.pleas.length > 0 && (
         <Panel
-          title="🎙 기사 소명함"
+          title="🎙 기사 상황 설명"
           right={
             <span className="text-[11px] text-gray-500">
-              검토 대기 {snap.pleas.filter((p) => p.status === '접수').length}건 · 인정 시 감점 즉시 복원
+              확인 대기 {snap.pleas.filter((p) => p.status === '접수').length}건 · 인정 시 감점 즉시 복원
             </span>
           }
           className="border-emerald-500/20"
@@ -204,7 +204,7 @@ export default function OperatorView() {
                 <div className="min-w-0 flex-1 text-xs">
                   <div className="font-semibold text-gray-200">
                     {p.vehicleId.slice(-4)}호 {p.driverName} 기사 — <span className="text-red-400">{p.eventType}</span>{' '}
-                    <span className="text-[10px] text-gray-500">({simClock(p.simTime)} · {p.method} 소명)</span>
+                    <span className="text-[10px] text-gray-500">({simClock(p.simTime)} · {p.method} 설명)</span>
                   </div>
                   <div className="mt-0.5 truncate text-[11px] italic text-gray-400">"{p.note}"</div>
                 </div>
@@ -213,7 +213,7 @@ export default function OperatorView() {
                     onClick={() => engine.acknowledgePlea(p.id)}
                     className="shrink-0 rounded-md bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-500"
                   >
-                    소명 인정
+                    설명 확인
                   </button>
                 ) : (
                   <span className="shrink-0 rounded-md bg-emerald-500/20 px-2 py-1 text-[10px] font-bold text-emerald-400">

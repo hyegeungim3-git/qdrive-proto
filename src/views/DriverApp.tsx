@@ -117,7 +117,7 @@ export default function DriverApp() {
       engine.submitPlea(v.id, note, method)
       setPleaState('sent')
     }
-    if (!SR) return submit('방어 운전 소명 (음성 미지원 환경 — 버튼 접수)', '버튼')
+    if (!SR) return submit('방어 운전 상황 설명 (음성 미지원 환경 — 버튼 접수)', '버튼')
     try {
       const rec = new SR()
       rec.lang = 'ko-KR'
@@ -130,8 +130,8 @@ export default function DriverApp() {
         submit(note, method)
       }
       rec.onresult = (e: any) => finish(e.results[0][0].transcript, '음성')
-      rec.onerror = () => finish('방어 운전 소명 (음성 인식 실패 — 버튼 접수)', '버튼')
-      rec.onend = () => finish('방어 운전 소명 (음성 무입력 — 버튼 접수)', '버튼')
+      rec.onerror = () => finish('방어 운전 상황 설명 (음성 인식 실패 — 버튼 접수)', '버튼')
+      rec.onend = () => finish('방어 운전 상황 설명 (음성 무입력 — 버튼 접수)', '버튼')
       rec.start()
       setTimeout(() => {
         try {
@@ -141,7 +141,7 @@ export default function DriverApp() {
         }
       }, 5000)
     } catch {
-      submit('방어 운전 소명 (버튼 접수)', '버튼')
+      submit('방어 운전 상황 설명 (버튼 접수)', '버튼')
     }
   }
   const co2Saved = Math.max(0, (v.baselineFuelM3 - v.fuelM3) * 2.2)
@@ -593,7 +593,7 @@ export default function DriverApp() {
                     className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-black"
                     style={{ background: 'rgba(254, 202, 202, 0.95)', color: '#7f1d1d' }}
                   >
-                    🎙 소명 남기기
+                    🎙 상황 설명하기
                   </button>
                 )}
                 {pleaState === 'listening' && (
@@ -603,7 +603,7 @@ export default function DriverApp() {
                 )}
                 {pleaState === 'sent' && (
                   <span className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold" style={{ background: 'rgba(52,211,153,0.2)', color: '#a7f3d0' }}>
-                    ✓ 소명 접수 — 관제 검토 후 복원
+                    ✓ 설명 전달됨 — 관제 확인 후 반영
                   </span>
                 )}
               </div>
