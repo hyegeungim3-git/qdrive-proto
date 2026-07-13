@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import DemoControls from './components/DemoControls'
+import Copilot from './components/Copilot'
 import { toggleTheme, useTheme } from './theme'
 import { useSim } from './sim/store'
 import CityDashboard from './views/CityDashboard'
@@ -79,6 +80,9 @@ export default function App() {
         {tab === 'report' && <ReportView />}
         {tab === 'roadmap' && <TeaserView />}
       </main>
+
+      {/* AI 관제 코파일럿 — 어느 탭에서든 호출 */}
+      <Copilot onNavigate={(t) => setTab(t as TabId)} />
     </div>
   )
 }
