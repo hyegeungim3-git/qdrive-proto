@@ -139,6 +139,16 @@ export default function DriverApp() {
   const fromStop = route.loop ? route.stops[0].name : (v.dir === 1 ? route.stops[0] : route.stops[route.stops.length - 1]).name
   const toStop = route.loop ? '' : (v.dir === 1 ? route.stops[route.stops.length - 1] : route.stops[0]).name
 
+  // 앞차·뒤차 배차 간격 + 진행 바에 표시할 동일 방향 이웃 버스 위치
+  const hw = v.headway
+  const progPct = (o: (typeof snap.vehicles)[number]) =>
+    route.loop || o.dir === 1 ? o.odoOnRoute / totalM : 1 - o.odoOnRoute / totalM
+  const peerBuses = hw
+    ? snap.vehicles
+        .filter((o) => o.id === hw.frontId || o.id === hw.rearId)
+        .map((o) => ({ id: o.id, pct: Math.max(0, Math.min(1, progPct(o))), rel: o.id === hw.frontId ? '앞차' : '뒤차' }))
+    : []
+
   const { ref: scaleRef, scale } = useFrameScale()
 
   return (
@@ -278,14 +288,88 @@ export default function DriverApp() {
                       style={{ left: `${(route.loop || v.dir === 1 ? s.at : 1 - s.at) * 100}%` }}
                     />
                   ))}
+                  {/* 뒤차·앞차 위치 (같은 방향, 반투명 회색 버스) */}
+                  {hw &&
+                    peerBuses.map((p) => (
+                      <span
+                        key={p.id}
+                        title={`${p.rel} ${p.id.slice(-4)}호`}
+                        className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm leading-none opacity-45 transition-all duration-500"
+                        style={{ left: `${p.pct * 100}%`, transform: `translate(-50%,-50%)${v.dir === -1 && !route.loop ? '' : ' scaleX(-1)'}` }}
+                      >
+                        🚌
+                      </span>
+                    ))}
                   <span
-                    className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-base leading-none transition-all duration-500"
+                    className="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-base leading-none transition-all duration-500"
                     style={{ left: `${pct * 100}%`, transform: `translate(-50%,-50%)${v.dir === -1 && !route.loop ? '' : ' scaleX(-1)'}` }}
                   >
                     🚌
                   </span>
                 </div>
               </div>
+
+              {/* 앞차·뒤차 배차 간격 */}
+              {hw && hw.peers >= 2 && (
+                <div
+                  className={`rounded-2xl border px-5 py-3 ${
+                    hw.status === 'bunching'
+                      ? 'border-amber-500/40 bg-amber-500/10'
+                      : hw.status === 'gap'
+                        ? 'border-sky-500/30 bg-sky-500/10'
+                        : 'border-gray-800 bg-gray-900/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500">🔗 앞·뒤차 배차 간격</span>
+                    <span
+                      className={`font-bold ${
+                        hw.status === 'bunching'
+                          ? 'text-amber-300'
+                          : hw.status === 'gap'
+                            ? 'text-sky-300'
+                            : 'text-emerald-400'
+                      }`}
+                    >
+                      {hw.status === 'bunching'
+                        ? '⚠ 앞차 근접 — 몰림 주의'
+                        : hw.status === 'gap'
+                          ? '뒤차와 벌어짐'
+                          : '정상 간격 유지'}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-stretch gap-2 text-center">
+                    <div className="flex-1 rounded-lg bg-gray-800/50 py-1.5">
+                      <div className="text-[9px] text-gray-500">뒤차 {hw.rearId ? `${hw.rearId.slice(-4)}호` : '없음'}</div>
+                      <div className="text-lg font-extrabold tabular-nums text-gray-200">
+                        {hw.rearId ? `${hw.rearGapMin.toFixed(1)}` : '—'}
+                        {hw.rearId && <span className="text-[10px] font-medium text-gray-500">분</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center justify-center px-1">
+                      <span className="text-[9px] text-gray-500">이상</span>
+                      <span className="text-xs font-bold tabular-nums text-gray-400">{hw.idealMin.toFixed(1)}분</span>
+                    </div>
+                    <div
+                      className={`flex-1 rounded-lg py-1.5 ${hw.status === 'bunching' ? 'bg-amber-500/15' : 'bg-gray-800/50'}`}
+                    >
+                      <div className="text-[9px] text-gray-500">앞차 {hw.frontId ? `${hw.frontId.slice(-4)}호` : '없음'}</div>
+                      <div
+                        className={`text-lg font-extrabold tabular-nums ${hw.status === 'bunching' ? 'text-amber-300' : 'text-gray-200'}`}
+                      >
+                        {hw.frontId ? `${hw.frontGapMin.toFixed(1)}` : '—'}
+                        {hw.frontId && <span className="text-[10px] font-medium text-gray-500">분</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {hw.status === 'bunching' && (
+                    <div className="mt-1.5 text-[10px] leading-relaxed text-amber-200/80">
+                      앞차와 간격이 좁습니다 — 정류장에서 잠시 여유를 두면 배차가 고르게 유지됩니다 (관제 배차
+                      권고와 연동)
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 다음 정류장 */}
               <div className="flex items-center justify-between gap-4 rounded-2xl bg-gray-900/60 px-6 py-4">

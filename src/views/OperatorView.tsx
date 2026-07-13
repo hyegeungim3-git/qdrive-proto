@@ -239,6 +239,7 @@ export default function OperatorView() {
               <th className="pb-2 pr-3 font-medium">주행</th>
               <th className="pb-2 pr-3 font-medium">연료(CNG)</th>
               <th className="pb-2 pr-3 font-medium">재차율</th>
+              <th className="pb-2 pr-3 font-medium">배차간격</th>
               <th className="pb-2 pr-3 font-medium">위험운전</th>
               <th className="pb-2 font-medium">상태</th>
             </tr>
@@ -274,6 +275,28 @@ export default function OperatorView() {
                     >
                       {Math.round(v.occupancy * 100)}%
                     </span>
+                  </td>
+                  <td className="py-2 pr-3">
+                    {v.headway && v.headway.peers >= 2 ? (
+                      <span
+                        className={`tabular-nums ${
+                          v.headway.status === 'bunching'
+                            ? 'font-semibold text-amber-400'
+                            : v.headway.status === 'gap'
+                              ? 'text-sky-400'
+                              : 'text-gray-400'
+                        }`}
+                        title={`앞차 ${v.headway.frontId ? `${v.headway.frontGapMin.toFixed(1)}분` : '없음(선두)'} / 뒤차 ${v.headway.rearId ? `${v.headway.rearGapMin.toFixed(1)}분` : '없음'} · 이상 ${v.headway.idealMin.toFixed(1)}분`}
+                      >
+                        {!v.headway.frontId
+                          ? '선두'
+                          : v.headway.status === 'bunching'
+                            ? `⚠ ${v.headway.frontGapMin.toFixed(1)}분`
+                            : `${v.headway.frontGapMin.toFixed(1)}분`}
+                      </span>
+                    ) : (
+                      <span className="text-gray-600">—</span>
+                    )}
                   </td>
                   <td className="py-2 pr-3">
                     <span className={`tabular-nums ${evTotal > 5 ? 'text-red-400 font-semibold' : 'text-gray-400'}`}>

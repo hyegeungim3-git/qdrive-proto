@@ -86,6 +86,18 @@ export interface VehicleFault {
   history: { t: number; temp: number }[]
 }
 
+/** 앞차·뒤차 배차 간격 (같은 노선·같은 방향 기준) */
+export interface Headway {
+  frontId: string | null // 앞차 차량번호
+  frontGapMin: number // 앞차와의 간격(분)
+  rearId: string | null // 뒤차 차량번호
+  rearGapMin: number // 뒤차와의 간격(분)
+  idealMin: number // 이상 배차 간격(분)
+  /** normal=정상, bunching=앞차 근접(몰림), gap=뒤차 벌어짐 */
+  status: 'normal' | 'bunching' | 'gap'
+  peers: number // 같은 방향 운행 대수
+}
+
 export interface VehicleState {
   id: string // 차량번호 e.g. 대구70자3742
   routeId: string
@@ -121,6 +133,8 @@ export interface VehicleState {
   lastEvent?: Packet409
   /** 마지막 이벤트의 실제 시각(ms) — 배속과 무관한 UI 경고 표시용 */
   lastEventWall?: number
+  /** 앞차·뒤차 배차 간격 (buildSnapshot에서 계산) */
+  headway?: Headway
 }
 
 /** 민원 증빙 자동매칭 결과 (Agentic — 조사 에이전트) */

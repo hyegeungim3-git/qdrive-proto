@@ -13,6 +13,7 @@ import {
   type Plea,
   type RiskEventType,
   type SimSnapshot,
+  type Headway,
   type VehicleFault,
   type VehicleState,
   type WeatherCondition,
@@ -707,8 +708,66 @@ export class SimEngine {
 
   /* ── 스냅샷 / 구독 ────────────────────────────────────────── */
 
+  /** 같은 노선·같은 방향 차량들의 앞차/뒤차 배차 간격 계산 */
+  private computeHeadways(vehicles: VehicleState[]) {
+    const AVG_M_PER_MIN = 416 // 25km/h
+    // 노선+방향으로 그룹핑
+    const groups = new Map<string, VehicleState[]>()
+    for (const v of vehicles) {
+      const ctx = this.routes.get(v.routeId)
+      if (!ctx) continue
+      const key = ctx.route.loop ? v.routeId : `${v.routeId}|${v.dir}`
+      const g = groups.get(key)
+      if (g) g.push(v)
+      else groups.set(key, [v])
+    }
+    for (const [, group] of groups) {
+      const first = group[0]
+      const ctx = this.routes.get(first.routeId)!
+      const total = ctx.idx.totalM
+      const loop = ctx.route.loop
+      // 진행 방향 기준 위치 (dir=-1이면 역순 진행이므로 반전)
+      const prog = (v: VehicleState) => (loop || v.dir === 1 ? v.odoOnRoute : total - v.odoOnRoute)
+      const sorted = [...group].sort((a, b) => prog(a) - prog(b))
+      const n = sorted.length
+      const idealMin = total / Math.max(1, n) / AVG_M_PER_MIN
+      sorted.forEach((v, i) => {
+        if (n < 2) {
+          v.headway = { frontId: null, frontGapMin: 0, rearId: null, rearGapMin: 0, idealMin, status: 'normal', peers: n }
+          return
+        }
+        // 앞차 = 진행 방향으로 다음 위치. 순환선은 wrap, 왕복선은 끝 차량이면 앞차 없음
+        const frontIdx = loop ? (i + 1) % n : i + 1
+        const rearIdx = loop ? (i - 1 + n) % n : i - 1
+        const front = frontIdx < n ? sorted[frontIdx] : null
+        const rear = rearIdx >= 0 ? sorted[rearIdx] : null
+        const gapTo = (o: VehicleState | null) => {
+          if (!o) return Infinity
+          let d = prog(o) - prog(v)
+          if (loop) d = ((d % total) + total) % total
+          return Math.abs(d) / AVG_M_PER_MIN
+        }
+        const frontGapMin = gapTo(front)
+        const rearGapMin = gapTo(rear)
+        let status: Headway['status'] = 'normal'
+        if (front && frontGapMin < idealMin * 0.5) status = 'bunching'
+        else if (rear && rearGapMin > idealMin * 1.6 && rearGapMin !== Infinity) status = 'gap'
+        v.headway = {
+          frontId: front?.id ?? null,
+          frontGapMin: frontGapMin === Infinity ? 0 : frontGapMin,
+          rearId: rear?.id ?? null,
+          rearGapMin: rearGapMin === Infinity ? 0 : rearGapMin,
+          idealMin,
+          status,
+          peers: n,
+        }
+      })
+    }
+  }
+
   private buildSnapshot(): SimSnapshot {
     const vehicles = this.vehicles.map((v) => ({ ...v, eventCounts: { ...v.eventCounts } }))
+    this.computeHeadways(vehicles)
     const totalFuel = vehicles.reduce((s, v) => s + v.fuelM3, 0)
     const totalBaseline = vehicles.reduce((s, v) => s + v.baselineFuelM3, 0)
     const totalDist = vehicles.reduce((s, v) => s + v.distanceKm, 0)
